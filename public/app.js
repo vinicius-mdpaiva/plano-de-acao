@@ -94,7 +94,7 @@ function montarMes(){
   }
 }
 
-/* ---------- plano do mês (fotografia) ---------- */
+/* ---------- plano mensal ---------- */
 function desfecho(f, dono){
   const its = ITENS.filter(i=>i.dono===dono && MES.semanas.includes(i.semana) && mesmaConta(i,f));
   const g=its.find(i=>i.resultado==='ganhou'); if(g) return {t:'Ganhou na '+wk(g.semana), c:'p-good', fim:true, ganho:g.valor};
@@ -130,18 +130,18 @@ function tabelaFoto(linhas, mostrarDono, editavel){
       <td>${editavel?'<span class="tag">Rascunho</span>':`<span class="pill ${l.des.c}">${l.des.t}</span>`}</td>
       <td>${editavel?`<button class="btn sm ghost" data-rm="${l.id}">Remover</button>`:''}</td></tr>`;}).join('');
   return `<div class="tbl"><table><thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>Negócio / lead</th><th class="num">Valor</th><th>Temp.</th><th>Semana prevista</th><th>O que aconteceu</th><th></th></tr></thead>
-    <tbody>${rows||`<tr><td colspan="7" class="empty">Nenhum negócio na fotografia ainda.</td></tr>`}</tbody></table></div>`;
+    <tbody>${rows||`<tr><td colspan="7" class="empty">Nenhum negócio no plano mensal ainda.</td></tr>`}</tbody></table></div>`;
 }
 function painelRevisao(r, pv){
   return pv ? `<div class="kpis">
-      <div class="kpi"><span class="k">Contas na fotografia</span><span class="v">${r.pv.length}</span><span class="d">reuniões previstas no mês</span></div>
-      <div class="kpi"><span class="k">Realizadas</span><span class="v">${r.realPV}</span><span class="d">da fotografia</span></div>
+      <div class="kpi"><span class="k">Contas no plano mensal</span><span class="v">${r.pv.length}</span><span class="d">reuniões previstas no mês</span></div>
+      <div class="kpi"><span class="k">Realizadas</span><span class="v">${r.realPV}</span><span class="d">do plano mensal</span></div>
       <div class="kpi"><span class="k">Atrasadas</span><span class="v">${r.pv.filter(l=>l.des.c==='p-warn').length}</span><span class="d">semana prevista já passou</span></div></div>`
   : `<div class="kpis">
-      <div class="kpi"><span class="k">Fotografia</span><span class="v">${brl(r.total)}</span><span class="d">${r.vd.length} negócios no início do mês</span></div>
-      <div class="kpi"><span class="k">Convertido</span><span class="v">${brl(r.ganho)}</span><span class="d">${r.total?Math.round(r.ganho/r.total*100):0}% da fotografia</span></div>
-      <div class="kpi"><span class="k">Perdido</span><span class="v">${brl(r.perdido)}</span><span class="d">da fotografia</span></div>
-      <div class="kpi"><span class="k">Ganho fora da fotografia</span><span class="v">${brl(r.foraV)}</span><span class="d">${r.fora.length} negócios que surgiram no mês</span></div></div>`;
+      <div class="kpi"><span class="k">Plano mensal</span><span class="v">${brl(r.total)}</span><span class="d">${r.vd.length} negócios no início do mês</span></div>
+      <div class="kpi"><span class="k">Convertido</span><span class="v">${brl(r.ganho)}</span><span class="d">${r.total?Math.round(r.ganho/r.total*100):0}% do plano mensal</span></div>
+      <div class="kpi"><span class="k">Perdido</span><span class="v">${brl(r.perdido)}</span><span class="d">do plano mensal</span></div>
+      <div class="kpi"><span class="k">Ganho fora do plano mensal</span><span class="v">${brl(r.foraV)}</span><span class="d">${r.fora.length} negócios que surgiram no mês</span></div></div>`;
 }
 function datalistClint(id){
   return `<datalist id="${id}">${Object.keys(CLINT.porRotulo).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`;
@@ -155,16 +155,16 @@ function viewMes(){
   const r=resumoFoto([eu]);
   if(F.congelado){
     $('#view').innerHTML=`
-    <div class="panel"><h2>Plano de ${MES.label} · fotografia de ${fd(F.congelado)}</h2>
-      <p class="hint">Esta é a foto do seu funil no início do mês. Ela não muda mais. A coluna "O que aconteceu" acompanha o plano semanal sozinha, para a revisão no fim do mês.</p>
+    <div class="panel"><h2>Plano mensal de ${MES.label} · congelado em ${fd(F.congelado)}</h2>
+      <p class="hint">Este é o seu plano do início do mês. Ele não muda mais. A coluna "O que aconteceu" acompanha o plano semanal sozinha, para a revisão no fim do mês.</p>
       ${painelRevisao(r,pv)}</div>
     <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
-    <div class="panel"><h2>Negócios da fotografia</h2>${tabelaFoto(r.linhas,false,false)}</div>`;
+    <div class="panel"><h2>Negócios do plano mensal</h2>${tabelaFoto(r.linhas,false,false)}</div>`;
     return;
   }
   $('#view').innerHTML=`
-  <div class="panel"><h2>Montar o plano de ${MES.label}</h2>
-    <p class="hint">Liste todo o funil que você vai trabalhar no mês e a semana em que espera ${pv?'a reunião':'o fechamento'}. Prazo: ${fd(MES.prazo)}. Depois de congelar, a fotografia não muda. Toda semana, o que estiver previsto aparece no seu plano semanal para você puxar com um clique.</p>
+  <div class="panel"><h2>Montar o plano mensal de ${MES.label}</h2>
+    <p class="hint">Liste todo o funil que você vai trabalhar no mês e a semana em que espera ${pv?'a reunião':'o fechamento'}. Prazo: ${fd(MES.prazo)}. Depois de congelar, o plano mensal não muda. Toda semana, o que estiver previsto aparece no seu plano semanal para você puxar com um clique.</p>
     <form id="addM" class="form">
       <label class="f wide" for="mEmp">Empresa (busca no Clint)<input id="mEmp" list="clintM" autocomplete="off" placeholder="Digite o nome"></label>
       <label class="f wide" for="mProd">${pv?'Produto de interesse':'Produto'}<select id="mProd">${prodOptions('')}</select></label>
@@ -172,15 +172,18 @@ function viewMes(){
       <label class="f" for="mTemp">Temperatura<select id="mTemp">${tempOptions('Morno')}</select></label>
       <label class="f" for="mSem">Semana prevista<select id="mSem">${MES.semanas.map(w=>`<option value="${w}">${sem(w).label}</option>`).join('')}</select></label>
       <p class="clint" id="mInfo">Busque a empresa pelo nome. Se não estiver no Clint, digite o nome mesmo assim.</p>
-      <div class="actions"><button class="btn primary" type="submit">Adicionar à fotografia</button></div>
+      <div class="actions"><button class="btn primary" type="submit">Adicionar ao plano mensal</button></div>
     </form>
     ${datalistClint('clintM')}</div>
+  ${(()=>{ const k=semanaisForaDoMensal(eu); return k.length?`<div class="panel atalho"><div><h2>Trazer do plano semanal</h2>
+    <p class="hint">${k.length} ${k.length===1?'compromisso que você já lançou':'compromissos que você já lançou'} no plano semanal deste mês ${k.length===1?'ainda não está':'ainda não estão'} no plano mensal: ${k.slice(0,4).map(i=>esc(i.empresa)).join(', ')}${k.length>4?'…':''}. Traga com um clique, sem digitar de novo.</p></div>
+    <button class="btn primary" id="importarSem" type="button">Trazer ${k.length} para o plano mensal</button></div>`:''; })()}
   <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
-  <div class="panel"><h2>Rascunho da fotografia</h2>${tabelaFoto(r.linhas,false,true)}
+  <div class="panel"><h2>Rascunho do plano mensal</h2>${tabelaFoto(r.linhas,false,true)}
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       ${state.confirmar
-        ? `<span>Congelar agora? Depois disso a fotografia não pode ser editada.</span><button class="btn primary" id="congSim">Sim, congelar</button><button class="btn ghost" id="congNao">Voltar</button>`
-        : `<button class="btn primary" id="congelar" ${F.itens.length?'':'disabled'}>Congelar fotografia do mês</button>`}
+        ? `<span>Congelar agora? Depois disso o plano mensal não pode ser editado.</span><button class="btn primary" id="congSim">Sim, congelar</button><button class="btn ghost" id="congNao">Voltar</button>`
+        : `<button class="btn primary" id="congelar" ${F.itens.length?'':'disabled'}>Congelar plano mensal</button>`}
     </div></div>`;
   $('#mEmp').addEventListener('input',()=>{
     const n=CLINT.porRotulo[$('#mEmp').value.trim()];
@@ -191,11 +194,12 @@ function viewMes(){
     const rot=$('#mEmp').value.trim(), n=CLINT.porRotulo[rot];
     const emp=n?(n.empresa||n.contato_nome||rot):rot, pr=$('#mProd').value, val=pv?0:Number($('#mVal').value||0);
     if(!emp) return toast('Informe a empresa'); if(!pr) return toast('Escolha o produto'); if(!pv&&!val) return toast('Informe o valor');
-    await salvar('fotoAdicionar',{mes:MES.id, empresa:emp, deal_id:n?.deal_id||null, produto:pr, valor:val, temp:$('#mTemp').value, semana:$('#mSem').value}, `${emp} entrou na fotografia`);
+    await salvar('fotoAdicionar',{mes:MES.id, empresa:emp, deal_id:n?.deal_id||null, produto:pr, valor:val, temp:$('#mTemp').value, semana:$('#mSem').value}, `${emp} entrou no plano mensal`);
   });
-  $('#view').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>salvar('fotoRemover',{id:Number(b.dataset.rm)},'Removido da fotografia')));
+  $('#view').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>salvar('fotoRemover',{id:Number(b.dataset.rm)},'Removido do plano mensal')));
+  if($('#importarSem')) $('#importarSem').addEventListener('click',async e=>{ e.target.disabled=true; await salvar('fotoImportarSemana',{mes:MES.id}); });
   if($('#congelar')) $('#congelar').addEventListener('click',()=>{state.confirmar=true; render();});
-  if($('#congSim')) $('#congSim').addEventListener('click',async()=>{state.confirmar=false; await salvar('fotoCongelar',{mes:MES.id},'Fotografia congelada');});
+  if($('#congSim')) $('#congSim').addEventListener('click',async()=>{state.confirmar=false; await salvar('fotoCongelar',{mes:MES.id},'Plano mensal congelado');});
   if($('#congNao')) $('#congNao').addEventListener('click',()=>{state.confirmar=false; render();});
 }
 function viewMesGestor(){
@@ -205,16 +209,30 @@ function viewMesGestor(){
   const r=resumoFoto(donos), soPv=donos.every(d=>esteiraDe(d)==='pv');
   const st=nomes.map(n=>{const F=FOTOS[n]; return `<span class="pill ${F&&F.congelado?'p-good':'p-warn'}">${esc(n)} · ${F&&F.congelado?'congelado em '+fd(F.congelado):F?'em rascunho':'não começou'}</span>`;}).join(' ');
   $('#view').innerHTML=`
-  <div class="panel"><h2>Planos de ${MES.label}</h2>
+  <div class="panel"><h2>Planos mensais de ${MES.label}</h2>
     <div class="form" style="grid-template-columns:minmax(0,220px)"><label class="f" for="verM">Plano de<select id="verM">${['Todos',...nomes].map(n=>`<option ${n===state.verMes?'selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
     <div class="result">${st}</div>
+    ${avisosMensal(nomes)}
     <p class="hint">Rascunhos aparecem na soma para você acompanhar a montagem. A revisão vale a partir do congelamento. O mês segue a semana escolhida no topo.</p>
     ${soPv?'':painelRevisao(r,false)}
     ${donos.some(d=>esteiraDe(d)==='pv')?painelRevisao(r,true):''}</div>
   <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
-  <div class="panel"><h2>Negócios da fotografia</h2>${tabelaFoto(r.linhas,state.verMes==='Todos',false)}</div>
-  ${r.fora.length?`<div class="panel"><h2>Ganhos fora da fotografia</h2><p class="hint">Negócios que ninguém previu no início do mês e viraram venda.</p><ul style="margin:0;padding-left:18px">${r.fora.map(i=>`<li><b>${esc(i.empresa)}</b> · ${esc(i.dono)} · ${brl(i.valor)} · ${wk(i.semana)}</li>`).join('')}</ul></div>`:''}`;
+  <div class="panel"><h2>Negócios do plano mensal</h2>${tabelaFoto(r.linhas,state.verMes==='Todos',false)}</div>
+  ${r.fora.length?`<div class="panel"><h2>Ganhos fora do plano mensal</h2><p class="hint">Negócios que ninguém previu no início do mês e viraram venda.</p><ul style="margin:0;padding-left:18px">${r.fora.map(i=>`<li><b>${esc(i.empresa)}</b> · ${esc(i.dono)} · ${brl(i.valor)} · ${wk(i.semana)}</li>`).join('')}</ul></div>`:''}`;
   $('#verM').addEventListener('change',e=>{state.verMes=e.target.value; render();});
+}
+// semanais do mês que ainda não estão no plano mensal da pessoa (um por conta, a semana mais cedo)
+function semanaisForaDoMensal(eu){
+  const F=FOTOS[eu], ja=F?F.itens:[], vistos=[];
+  return ITENS.filter(i=>i.dono===eu && MES.semanas.includes(i.semana) && i.origem!=='fora')
+    .sort((a,b)=>a.semana.localeCompare(b.semana))
+    .filter(i=>{ if(ja.some(f=>mesmaConta(f,i)) || vistos.some(v=>mesmaConta(v,i))) return false; vistos.push(i); return true; });
+}
+function avisosMensal(nomes){
+  const l=nomes.map(n=>{ const F=FOTOS[n]; if(F&&F.itens.length) return '';
+    const k=semanaisForaDoMensal(n).length;
+    return `<li><b>${esc(n)}</b> ainda não montou o plano mensal${k?` · ${k} ${k===1?'compromisso':'compromissos'} no plano semanal`:''}</li>`; }).filter(Boolean);
+  return l.length?`<ul class="aviso-lista">${l.join('')}</ul>`:'';
 }
 function sugestoesDoMes(eu){
   const F=FOTOS[eu]; if(!F || !F.congelado || !MES.semanas.includes(state.semana)) return [];
@@ -238,7 +256,7 @@ function planoTabela(dono, editavel){
   return tabelaItens(itens, editavel, false, esteiraDe(dono)==='pv');
 }
 function tabelaItens(itens, editavel, mostrarDono, soPv){
-  const cols = mostrarDono ? 7 : 6, s = sem(state.semana);
+  const cols = mostrarDono ? 6 : 5, s = sem(state.semana);
   const rows = itens.map(i=>{
     const pv = esteiraDe(i.dono)==='pv';
     const semDiaPill = '<span class="pill p-warn">Sem dia definido</span>';
@@ -251,8 +269,9 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
       <td class="when">${fd(prev(i))}</td>
-      <td>${statusPill(i)}</td>
-      <td>${editavel && !i.resultado ? `<button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Atualizar'}</button>`:''}</td>
+      <td><div class="stack">${statusPill(i)}${editavel && !i.resultado ? (state.excluir===i.id
+        ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
+        : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Atualizar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}</div></td>
     </tr>`;
     if(state.editing!==i.id || !editavel) return main;
     return main + `<tr class="edit"><td colspan="${cols}">
@@ -270,12 +289,12 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
         <label class="f" for="e-prod-${i.id}">Produto
           <select id="e-prod-${i.id}">${prodOptions(i.produto)}</select></label>
         ${pv?'':`<label class="f" for="e-val-${i.id}">Valor (R$)<input id="e-val-${i.id}" type="number" min="0" step="500" value="${i.valor||''}"></label>`}
-        <div class="actions"><button class="btn primary" type="submit">Salvar</button>${i.de?'':`<button class="btn ghost danger" type="button" data-del="${i.id}">Excluir item</button>`}</div>
+        <div class="actions"><button class="btn primary" type="submit">Salvar</button></div>
       </form></td></tr>`;
   }).join('');
   const colData = mostrarDono ? 'Reunião / previsão' : soPv ? 'Data da reunião' : 'Previsão de fechamento';
   return `<div class="tbl"><table>
-    <thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>${mostrarDono?'Lead / negócio':soPv?'Lead':'Negócio'}</th><th>Em que pé está</th><th>Ação da semana · quando</th><th>${colData}</th><th>Status</th><th></th></tr></thead>
+    <thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>${mostrarDono?'Lead / negócio':soPv?'Lead':'Negócio'}</th><th>Em que pé está</th><th>Ação da semana · quando</th><th>${colData}</th><th>Status</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="${cols}" class="empty">Nenhum compromisso nesta semana ainda.</td></tr>`}</tbody></table></div>`;
 }
 function ligarTabela(root){
@@ -291,9 +310,11 @@ function ligarTabela(root){
     const ok = await api('atualizarItem',p);
     if(ok){ state.editing=null; await carregar(); render(); toast(`${i.empresa} atualizado`); }
   }));
-  root.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{
-    const ok = await api('excluirItem',{id:Number(b.dataset.del)});
-    if(ok){ state.editing=null; await carregar(); render(); toast('Item excluído'); }
+  root.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{ state.excluir=Number(b.dataset.del); render(); }));
+  root.querySelectorAll('[data-delno]').forEach(b=>b.addEventListener('click',()=>{ state.excluir=null; render(); }));
+  root.querySelectorAll('[data-delok]').forEach(b=>b.addEventListener('click',async()=>{
+    b.disabled=true; const ok = await api('excluirItem',{id:Number(b.dataset.delok)});
+    state.excluir=null; if(ok){ state.editing=null; await carregar(); toast('Item excluído'); } render();
   }));
 }
 
@@ -304,8 +325,8 @@ function viewPlano(){
   const sug = sugestoesDoMes(eu);
   $('#view').innerHTML = `
   ${sug.length?`<div class="panel">
-    <h2>Do seu plano do mês para a ${wk(state.semana)}</h2>
-    <p class="hint">Negócios da fotografia de ${MES.label} previstos para esta semana ou atrasados. Puxe para o plano e complete o status, a ação e o dia.</p>
+    <h2>Do seu plano mensal para a ${wk(state.semana)}</h2>
+    <p class="hint">Negócios do plano mensal de ${MES.label} previstos para esta semana ou atrasados. Puxe para o plano e complete o status, a ação e o dia.</p>
     <div class="tbl"><table><thead><tr><th>Negócio / lead</th><th class="num">Valor</th><th>Semana prevista</th><th></th></tr></thead><tbody>
     ${sug.map((f,k)=>`<tr><td><div class="stack"><b>${esc(f.empresa)}</b><span class="pill p-prod">${esc(f.produto)}</span></div></td>
       <td class="num">${pv?'—':brl(f.valor)}</td>
@@ -648,7 +669,7 @@ function viewComo(){
     <li><b>Sexta é fechamento.</b> Ganhou, Perdeu ou Rolar. Rolar leva o status junto para a próxima semana.</li>
     <li><b>Pré-vendas alimenta vendas.</b> Reunião realizada com vendedor escolhido vira item no plano dele, marcado para definir o próximo passo.</li>
     <li><b>Fora do plano é um botão.</b> Entra no realizado, fica fora da assertividade.</li>
-    <li><b>Plano do mês é uma fotografia.</b> Na primeira semana, cada pessoa lista o funil do mês com a semana prevista e congela. Toda semana, o que estava previsto aparece no plano semanal para puxar com um clique. No fim do mês, "O que aconteceu" mostra o que converteu, perdeu, atrasou e o que veio de fora da foto.</li>
+    <li><b>Plano mensal.</b> Na primeira semana, cada pessoa lista o funil do mês com a semana prevista e congela. O botão Trazer do plano semanal evita digitar duas vezes. Toda semana, o que estava previsto aparece no plano semanal para puxar com um clique. No fim do mês, "O que aconteceu" mostra o que converteu, perdeu, atrasou e o que veio de fora do plano mensal.</li>
     <li><b>A busca de empresas vem do Clint.</b> Aparecem os negócios ativos em que você é dono. Empresa fora do Clint também pode entrar no plano.</li></ol></div>`;
 }
 
@@ -665,9 +686,9 @@ const IC = {
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>`;
-const NAV_MEMBRO=()=>[['Plano',[['plano','Meu plano','list',viewPlano],['mes','Plano do mês','cal',viewMes],['fechamento','Fechamento de sexta','check',viewFechamento]]],
+const NAV_MEMBRO=()=>[['Plano',[['plano','Meu plano','list',viewPlano],['mes','Plano mensal','cal',viewMes],['fechamento','Fechamento de sexta','check',viewFechamento]]],
   ['Resultados',[['meudash','Meu dash','grid',viewMeuDash]]],['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
-const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTime],['mesgs','Planos do mês','cal',viewMesGestor]]],
+const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTime],['mesgs','Planos mensais','cal',viewMesGestor]]],
   ['Resultados',[['geral','Visão geral','grid',viewGeral]]],
   ['Administração',[['acessos','Acessos','key',viewAcessos],['clint','Dados do Clint','db',viewClint]]],
   ['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
@@ -725,7 +746,7 @@ function render(){
   const cur=flat.find(t=>t[0]===state.tab);
   $('#nav').innerHTML=nav.map(([g,its])=>`<div class="navgroup"><h3>${g}</h3>${its.map(([id,l,ic])=>
     `<button class="nav" data-tab="${id}" ${id===state.tab?'aria-current="page"':''}>${svg(ic)}<span class="lbl">${l}</span>${badge(id)}</button>`).join('')}</div>`).join('');
-  $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
+  $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.excluir=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
   $('#pgEyebrow').textContent=cur[4]; $('#pgTitle').textContent=cur[1];
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
   $('#ctxSemana').hidden = ['acessos','clint','como','conta'].includes(state.tab);

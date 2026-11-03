@@ -7,8 +7,8 @@ Cada pessoa entra com o próprio acesso e vê só o próprio plano. O gestor vê
 Clint (webhooks + CSV) ──► /api/webhook/clint ──► Postgres (Neon) ◄── Plataforma (/)
 ```
 
-**Para o time:** Meu plano · Plano do mês (fotografia) · Fechamento de sexta · Meu dash
-**Para o gestor:** Planos do time (RTC e daily) · Planos do mês · Visão geral · Acessos · Dados do Clint
+**Para o time:** Meu plano · Plano mensal · Fechamento de sexta · Meu dash
+**Para o gestor:** Planos do time (RTC e daily) · Planos mensais · Visão geral · Acessos · Dados do Clint
 
 ---
 

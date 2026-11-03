@@ -97,7 +97,7 @@ th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
 td{padding:11px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 tbody tr:last-child td{border-bottom:0}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-td.txt{min-width:180px;max-width:300px}
+td.txt{min-width:140px;max-width:260px}
 td.when{white-space:nowrap;font-variant-numeric:tabular-nums;font-size:13px}
 tr.edit td{background:var(--sunk)}
 tr.nodate td{background:var(--warn-soft)}
@@ -166,3 +166,9 @@ tr.nodate td{background:var(--warn-soft)}
 .login-botao{background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:11px;font-weight:600;font-size:14px;cursor:pointer}
 .login-botao[disabled]{opacity:.6}
 [hidden]{display:none!important}
+
+.acoes-linha{display:flex;flex-direction:column;gap:6px;align-items:stretch;margin-top:4px}
+.acoes-linha .tag{margin:0}
+.aviso-lista{margin:0;padding:12px 14px 12px 32px;background:var(--warn-soft);border-radius:12px;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+.atalho{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;border-color:var(--accent)}
+.atalho > div{display:flex;flex-direction:column;gap:6px;flex:1 1 360px;min-width:0}
