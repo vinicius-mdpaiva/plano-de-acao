@@ -158,16 +158,25 @@ function viewMes(){
   const r=resumoFoto([eu]);
   if(F.congelado){
     $('#view').innerHTML=`
-    <div class="panel"><h2>Plano mensal de ${MES.label} · congelado em ${fd(F.congelado)}</h2>
+    <div class="panel"><h2>Plano mensal de ${MES.label} · concluído em ${fd(F.congelado)}</h2>
       <p class="hint">Este é o seu plano do início do mês. Ele não muda mais. A coluna "O que aconteceu" acompanha o plano semanal sozinha, para a revisão no fim do mês.</p>
       ${painelRevisao(r,pv)}</div>
     <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
     <div class="panel"><h2>Negócios do plano mensal</h2>${tabelaFoto(r.linhas,false,false)}</div>`;
     return;
   }
+  const n=F.itens.length;
   $('#view').innerHTML=`
+  <div class="panel status-mensal">
+    <div class="sm-txt"><span class="pill p-warn">Rascunho</span>
+      <h2>${n?`Seu plano mensal tem ${n} ${n===1?'negócio':'negócios'} e ainda não foi concluído`:'Seu plano mensal ainda está vazio'}</h2>
+      <p class="hint">${n?'Revise a lista abaixo. Quando estiver completa, clique em Concluir plano mensal. Só depois disso ele conta como entregue.':'Adicione os negócios do mês abaixo e, no fim, clique em Concluir plano mensal.'} Prazo: ${fd(MES.prazo)}.</p></div>
+    <div class="sm-acao">${state.confirmar
+      ? `<span class="hint" style="margin:0">Concluir agora? Depois disso o plano mensal não pode ser editado.</span><div class="result"><button class="btn primary" id="congSim">Sim, concluir</button><button class="btn ghost" id="congNao">Voltar</button></div>`
+      : `<button class="btn primary" id="congelar" ${n?'':'disabled'}>Concluir plano mensal</button>`}</div>
+  </div>
   <div class="panel"><h2>Montar o plano mensal de ${MES.label}</h2>
-    <p class="hint">Liste todo o funil que você vai trabalhar no mês e a semana em que espera ${pv?'a reunião':'o fechamento'}. Prazo: ${fd(MES.prazo)}. Depois de congelar, o plano mensal não muda. Toda semana, o que estiver previsto aparece no seu plano semanal para você puxar com um clique.</p>
+    <p class="hint">Liste todo o funil que você vai trabalhar no mês e a semana em que espera ${pv?'a reunião':'o fechamento'}. Depois de concluído, o plano mensal não muda. Toda semana, o que estiver previsto aparece no seu plano semanal para você puxar com um clique.</p>
     <form id="addM" class="form">
       <label class="f wide" for="mEmp">Empresa (busca no Clint)<input id="mEmp" list="clintM" autocomplete="off" placeholder="Digite o nome"></label>
       <label class="f wide" for="mProd">${pv?'Produto de interesse':'Produto'}<select id="mProd">${prodOptions('')}</select></label>
@@ -183,11 +192,7 @@ function viewMes(){
     <button class="btn primary" id="importarSem" type="button">Trazer ${k.length} para o plano mensal</button></div>`:''; })()}
   <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
   <div class="panel"><h2>Rascunho do plano mensal</h2>${tabelaFoto(r.linhas,false,true)}
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-      ${state.confirmar
-        ? `<span>Congelar agora? Depois disso o plano mensal não pode ser editado.</span><button class="btn primary" id="congSim">Sim, congelar</button><button class="btn ghost" id="congNao">Voltar</button>`
-        : `<button class="btn primary" id="congelar" ${F.itens.length?'':'disabled'}>Congelar plano mensal</button>`}
-    </div></div>`;
+    ${n&&!state.confirmar?`<div><button class="btn" id="congelar2" type="button">Concluir plano mensal</button></div>`:''}</div>`;
   $('#mEmp').addEventListener('input',()=>{
     const n=CLINT.porRotulo[$('#mEmp').value.trim()];
     $('#mInfo').innerHTML = n ? infoClint(n,pv) : 'Busque a empresa pelo nome. Se não estiver no Clint, digite o nome mesmo assim.';
@@ -202,7 +207,8 @@ function viewMes(){
   $('#view').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>salvar('fotoRemover',{id:Number(b.dataset.rm)},'Removido do plano mensal')));
   if($('#importarSem')) $('#importarSem').addEventListener('click',async e=>{ e.target.disabled=true; await salvar('fotoImportarSemana',{mes:MES.id}); });
   if($('#congelar')) $('#congelar').addEventListener('click',()=>{state.confirmar=true; render();});
-  if($('#congSim')) $('#congSim').addEventListener('click',async()=>{state.confirmar=false; await salvar('fotoCongelar',{mes:MES.id},'Plano mensal congelado');});
+  if($('#congelar2')) $('#congelar2').addEventListener('click',()=>{state.confirmar=true; render(); window.scrollTo({top:0,behavior:'smooth'});});
+  if($('#congSim')) $('#congSim').addEventListener('click',async()=>{state.confirmar=false; await salvar('fotoCongelar',{mes:MES.id},'Plano mensal concluído');});
   if($('#congNao')) $('#congNao').addEventListener('click',()=>{state.confirmar=false; render();});
 }
 function viewMesGestor(){
@@ -210,13 +216,15 @@ function viewMesGestor(){
   if(state.verMes!=='Todos' && !nomes.includes(state.verMes)) state.verMes='Todos';
   const donos=state.verMes==='Todos'?nomes:[state.verMes];
   const r=resumoFoto(donos);
-  const st=nomes.map(n=>{const F=FOTOS[n]; return `<span class="pill ${F&&F.congelado?'p-good':'p-warn'}">${esc(n)} · ${F&&F.congelado?'congelado em '+fd(F.congelado):F?'em rascunho':'não começou'}</span>`;}).join(' ');
+  const st=nomes.map(n=>{const F=FOTOS[n], k=F?F.itens.length:0;
+    const t = F&&F.congelado ? 'concluído em '+fd(F.congelado) : k ? `em rascunho · ${k} ${k===1?'negócio lançado':'negócios lançados'}, falta concluir` : 'não começou';
+    return `<span class="pill ${F&&F.congelado?'p-good':'p-warn'}">${esc(n)} · ${t}</span>`;}).join(' ');
   $('#view').innerHTML=`
   <div class="panel"><h2>Planos mensais de ${MES.label}</h2>
     <div class="form" style="grid-template-columns:minmax(0,220px)"><label class="f" for="verM">Plano de<select id="verM">${['Todos',...nomes].map(n=>`<option ${n===state.verMes?'selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
     <div class="result">${st}</div>
     ${avisosMensal(nomes)}
-    <p class="hint">O plano mensal é só de vendas. A pré-vendas trabalha com o plano semanal. Rascunhos aparecem na soma para você acompanhar a montagem; a revisão vale a partir do congelamento. O mês segue a semana escolhida no topo.</p>
+    <p class="hint">O plano mensal é só de vendas. A pré-vendas trabalha com o plano semanal. Rascunhos aparecem na soma para você acompanhar a montagem; a revisão vale a partir da conclusão. O mês segue a semana escolhida no topo.</p>
     ${painelRevisao(r,false)}</div>
   <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
   <div class="panel"><h2>Negócios do plano mensal</h2>${tabelaFoto(r.linhas,state.verMes==='Todos',false)}</div>
@@ -672,7 +680,7 @@ function viewComo(){
     <li><b>Sexta é fechamento.</b> Ganhou, Perdeu ou Rolar. Rolar leva o status junto para a próxima semana.</li>
     <li><b>Pré-vendas alimenta vendas.</b> Reunião realizada com vendedor escolhido vira item no plano dele, marcado para definir o próximo passo.</li>
     <li><b>Fora do plano é um botão.</b> Entra no realizado, fica fora da assertividade.</li>
-    <li><b>Plano mensal (só vendas).</b> Na primeira semana, cada vendedor lista o funil do mês com a semana prevista e congela. O botão Trazer do plano semanal evita digitar duas vezes. Toda semana, o que estava previsto aparece no plano semanal para puxar com um clique. No fim do mês, "O que aconteceu" mostra o que converteu, perdeu, atrasou e o que veio de fora do plano mensal.</li>
+    <li><b>Plano mensal (só vendas).</b> Na primeira semana, cada vendedor lista o funil do mês com a semana prevista e clica em Concluir plano mensal. O botão Trazer do plano semanal evita digitar duas vezes. Toda semana, o que estava previsto aparece no plano semanal para puxar com um clique. No fim do mês, "O que aconteceu" mostra o que converteu, perdeu, atrasou e o que veio de fora do plano mensal.</li>
     <li><b>A busca de empresas vem do Clint.</b> Aparecem os negócios ativos em que você é dono. Empresa fora do Clint também pode entrar no plano.</li></ol></div>`;
 }
 

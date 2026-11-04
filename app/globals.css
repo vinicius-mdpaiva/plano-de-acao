@@ -172,3 +172,7 @@ tr.nodate td{background:var(--warn-soft)}
 .aviso-lista{margin:0;padding:12px 14px 12px 32px;background:var(--warn-soft);border-radius:12px;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
 .atalho{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;border-color:var(--accent)}
 .atalho > div{display:flex;flex-direction:column;gap:6px;flex:1 1 360px;min-width:0}
+
+.status-mensal{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;border-color:var(--warn);background:var(--warn-soft)}
+.status-mensal .sm-txt{display:flex;flex-direction:column;gap:6px;align-items:flex-start;flex:1 1 380px;min-width:0}
+.status-mensal .sm-acao{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
