@@ -40,6 +40,14 @@ const mesmaConta = (a,b) => (a.deal_id && b.deal_id) ? a.deal_id===b.deal_id : S
 const souGestor = () => D.usuario.papel==='admin';
 const me = () => D.usuario.nome;
 
+// observações: chip na linha + linha expansível
+state.obs = new Set();
+const obsChip = (k, txt) => txt ? `<button type="button" class="obs-chip" data-obs="${k}" aria-expanded="${state.obs.has(k)}">${state.obs.has(k)?'Ocultar observações ▴':'Observações ▾'}</button>` : '';
+const obsRow = (k, txt, cols) => txt && state.obs.has(k) ? `<tr class="obs-row"><td colspan="${cols}"><div class="obs-box"><span class="k">Observações</span>${esc(txt)}</div></td></tr>` : '';
+function ligarObs(root){
+  root.querySelectorAll('[data-obs]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation(); const k=b.dataset.obs; state.obs.has(k)?state.obs.delete(k):state.obs.add(k); render(); }));
+}
+const obsCampo = (id, val, ph) => `<label class="f obs-campo" for="${id}">Observações <span class="opc">(opcional)</span><textarea id="${id}" rows="2" maxlength="2000" placeholder="${ph||'Algum detalhe desta negociação que vale registrar'}">${esc(val||'')}</textarea></label>`;
 function toast(m){ const t=$('#toast'); t.textContent=m; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,3200); }
 
 async function api(tipo, params){
@@ -135,6 +143,7 @@ function formFoto(f, cols){
     ${esteiraDe(me())==='pv'?'':`<label class="f" for="fe-val-${f.id}">Valor (R$)<input id="fe-val-${f.id}" type="number" min="0" step="500" value="${f.valor||''}"></label>`}
     <label class="f" for="fe-temp-${f.id}">Temperatura<select id="fe-temp-${f.id}">${tempOptions(f.temp)}</select></label>
     <label class="f" for="fe-sem-${f.id}">Semana prevista<select id="fe-sem-${f.id}">${MES.semanas.map(w=>`<option value="${w}" ${w===f.semana?'selected':''}>${sem(w).label}</option>`).join('')}</select></label>
+    ${obsCampo('fe-obs-'+f.id, f.observacoes)}
     <div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn ghost" type="button" data-fcancel>Cancelar</button></div>
   </form></td></tr>`;
 }
@@ -144,7 +153,7 @@ function ligarFoto(root){
   root.querySelectorAll('form[data-fsave]').forEach(f=>f.addEventListener('submit',async e=>{
     e.preventDefault(); const id=Number(f.dataset.fsave);
     const p={id, empresa:$('#fe-emp-'+id).value.trim(), produto:$('#fe-prod-'+id).value, temp:$('#fe-temp-'+id).value, semana:$('#fe-sem-'+id).value,
-      valor:$('#fe-val-'+id)?Number($('#fe-val-'+id).value||0):0};
+      valor:$('#fe-val-'+id)?Number($('#fe-val-'+id).value||0):0, observacoes:$('#fe-obs-'+id).value.trim()};
     if(!p.empresa) return toast('Informe a empresa'); if(!p.produto) return toast('Escolha o produto');
     const ok=await api('fotoEditar',p); if(ok){ state.editFoto=null; await carregar(); render(); toast('Plano mensal atualizado'); }
   }));
@@ -154,10 +163,10 @@ function tabelaFoto(linhas, mostrarDono, editavel, podeEditar=editavel){
     const pv=esteiraDe(l.dono)==='pv';
     const acoes = podeEditar ? `<div class="acoes-linha"><button class="btn sm" data-fedit="${l.id}">${state.editFoto===l.id?'Fechar':'Editar'}</button>${editavel?`<button class="btn sm ghost danger" data-rm="${l.id}">Remover</button>`:''}</div>` : '';
     return `<tr>${mostrarDono?`<td><span class="pill ${pv?'p-pv':'p-vd'}">${esc(l.dono)}</span></td>`:''}
-      <td><div class="stack"><b>${esc(l.empresa)}</b><span class="pill p-prod">${esc(l.produto)}</span></div></td>
+      <td><div class="stack"><b>${esc(l.empresa)}</b><span class="pill p-prod">${esc(l.produto)}</span>${obsChip('f'+l.id, l.observacoes)}</div></td>
       <td class="num">${pv?'—':brl(l.valor)}</td><td>${esc(l.temp)}</td><td class="when">${wk(l.semana)}<span class="tag">${dm(l.semana)} a ${dm(addDias(l.semana,4))}</span></td>
       <td>${editavel?'<span class="tag">Rascunho</span>':`<span class="pill ${l.des.c}">${l.des.t}</span>`}</td>
-      <td>${acoes}</td></tr>${podeEditar&&state.editFoto===l.id?formFoto(l, mostrarDono?7:6):''}`;}).join('');
+      <td>${acoes}</td></tr>${obsRow('f'+l.id, l.observacoes, mostrarDono?7:6)}${podeEditar&&state.editFoto===l.id?formFoto(l, mostrarDono?7:6):''}`;}).join('');
   return `<div class="tbl"><table><thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>Negócio / lead</th><th class="num">Valor</th><th>Temp.</th><th>Semana prevista</th><th>O que aconteceu</th><th></th></tr></thead>
     <tbody>${rows||`<tr><td colspan="7" class="empty">Nenhum negócio no plano mensal ainda.</td></tr>`}</tbody></table></div>`;
 }
@@ -210,6 +219,7 @@ function viewMes(){
       ${pv?'':`<label class="f" for="mVal">Valor (R$)<input id="mVal" type="number" min="0" step="500" placeholder="20000"></label>`}
       <label class="f" for="mTemp">Temperatura<select id="mTemp">${tempOptions('Morno')}</select></label>
       <label class="f" for="mSem">Semana prevista<select id="mSem">${MES.semanas.map(w=>`<option value="${w}">${sem(w).label}</option>`).join('')}</select></label>
+      ${obsCampo('mObs','')}
       <p class="clint" id="mInfo">Busque pela empresa ou pelo contato. A lista traz todos os seus negócios no Clint. Não achou? Digite o nome mesmo assim.</p>
       <div class="actions"><button class="btn primary" type="submit">Adicionar ao plano mensal</button></div>
     </form>
@@ -229,7 +239,7 @@ function viewMes(){
     const rot=$('#mEmp').value.trim(), n=CLINT.porRotulo[rot];
     const emp=n?(n.empresa||n.contato_nome||rot):rot, pr=$('#mProd').value, val=pv?0:Number($('#mVal').value||0);
     if(!emp) return toast('Informe a empresa'); if(!pr) return toast('Escolha o produto'); if(!pv&&!val) return toast('Informe o valor');
-    await salvar('fotoAdicionar',{mes:MES.id, empresa:emp, deal_id:n?.deal_id||null, produto:pr, valor:val, temp:$('#mTemp').value, semana:$('#mSem').value}, `${emp} entrou no plano mensal`);
+    await salvar('fotoAdicionar',{mes:MES.id, empresa:emp, deal_id:n?.deal_id||null, produto:pr, valor:val, temp:$('#mTemp').value, semana:$('#mSem').value, observacoes:$('#mObs').value.trim()}, `${emp} entrou no plano mensal`);
   });
   $('#view').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>salvar('fotoRemover',{id:Number(b.dataset.rm)},'Removido do plano mensal')));
   ligarFoto($('#view'));
@@ -304,7 +314,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
       `<div class="stack"><span>${esc(i.acao)}</span>${i.quando?`<span class="tag">${fd(i.quando)}</span>`:semDiaPill}</div>`;
     const main = `<tr class="${!i.resultado&&!i.quando?'nodate':''}">
       ${mostrarDono?`<td><span class="pill ${pv?'p-pv':'p-vd'}">${esc(i.dono)}</span></td>`:''}
-      <td><div class="stack"><b>${esc(i.empresa)}</b>${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
+      <td><div class="stack"><b>${esc(i.empresa)}</b>${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${obsChip('i'+i.id, i.observacoes)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
       <td class="when">${fd(prev(i))}</td>
@@ -312,7 +322,8 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
         ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
         : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}</div></td>
     </tr>`;
-    if(state.editing!==i.id || !editavel) return main;
+    const linhaObs = obsRow('i'+i.id, i.observacoes, cols);
+    if(state.editing!==i.id || !editavel) return main + linhaObs;
     return main + `<tr class="edit"><td colspan="${cols}">
       <form class="form" data-save="${i.id}">
         <label class="f wide" for="e-status-${i.id}">Em que pé está
@@ -328,6 +339,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
         <label class="f" for="e-prod-${i.id}">Produto
           <select id="e-prod-${i.id}">${prodOptions(i.produto)}</select></label>
         ${pv?'':`<label class="f" for="e-val-${i.id}">Valor (R$)<input id="e-val-${i.id}" type="number" min="0" step="500" value="${i.valor||''}"></label>`}
+        ${obsCampo('e-obs-'+i.id, i.observacoes)}
         <div class="actions"><button class="btn primary" type="submit">Salvar</button></div>
       </form></td></tr>`;
   }).join('');
@@ -344,7 +356,7 @@ function ligarTabela(root){
     e.preventDefault(); const id=Number(f.dataset.save), i=ITENS.find(x=>x.id===id);
     const p={id, status:$('#e-status-'+id).value.trim(), acao:$('#e-acao-'+id).value.trim(), quando:$('#e-quando-'+id).value,
       previsao:$('#e-prev-'+id).value, temp:$('#e-temp-'+id).value, produto:$('#e-prod-'+id).value,
-      valor:$('#e-val-'+id)?Number($('#e-val-'+id).value||0):0};
+      valor:$('#e-val-'+id)?Number($('#e-val-'+id).value||0):0, observacoes:$('#e-obs-'+id).value.trim()};
     if(!p.produto) return toast('Escolha o produto');
     const ok = await api('atualizarItem',p);
     if(ok){ state.editing=null; await carregar(); render(); toast(`${i.empresa} atualizado`); }
@@ -367,10 +379,10 @@ function viewPlano(){
     <h2>Do seu plano mensal para a ${wk(state.semana)}</h2>
     <p class="hint">Negócios do plano mensal de ${MES.label} previstos para esta semana ou atrasados. Puxe para o plano e complete o status, a ação e o dia. Errou a temperatura, o valor ou a semana? Clique em Editar.</p>
     <div class="tbl"><table><thead><tr><th>Negócio / lead</th><th class="num">Valor</th><th>Temp.</th><th>Semana prevista</th><th></th></tr></thead><tbody>
-    ${sug.map((f,k)=>`<tr><td><div class="stack"><b>${esc(f.empresa)}</b><span class="pill p-prod">${esc(f.produto)}</span></div></td>
+    ${sug.map((f,k)=>`<tr><td><div class="stack"><b>${esc(f.empresa)}</b><span class="pill p-prod">${esc(f.produto)}</span>${obsChip('f'+f.id, f.observacoes)}</div></td>
       <td class="num">${pv?'—':brl(f.valor)}</td><td>${esc(f.temp)}</td>
       <td>${f.semana<state.semana?`<span class="pill p-warn">Atrasado · ${wk(f.semana)}</span>`:wk(f.semana)}</td>
-      <td><div class="acoes-linha"><button class="btn sm primary" data-puxar="${k}">Trazer para a semana</button><button class="btn sm" data-fedit="${f.id}">${state.editFoto===f.id?'Fechar':'Editar'}</button></div></td></tr>${state.editFoto===f.id?formFoto(f,5):''}`).join('')}
+      <td><div class="acoes-linha"><button class="btn sm primary" data-puxar="${k}">Trazer para a semana</button><button class="btn sm" data-fedit="${f.id}">${state.editFoto===f.id?'Fechar':'Editar'}</button></div></td></tr>${obsRow('f'+f.id, f.observacoes, 5)}${state.editFoto===f.id?formFoto(f,5):''}`).join('')}
     </tbody></table></div></div>`:''}
   <div class="panel">
     <h2>Novo compromisso na ${wk(state.semana)}</h2>
@@ -392,6 +404,7 @@ function viewPlano(){
         <input id="qd" type="date" min="${s.ini}" max="${s.fim}"></label>
       <label class="f" for="pv">${pv?'Data da reunião':'Previsão de fechamento'}
         <input id="pv" type="date"></label>
+      ${obsCampo('obs','',pv?'Ex.: decisor só fala depois das 18h':'Ex.: sócio volta de viagem dia 12, negociar à vista')}
       <div class="actions">
         <button class="btn primary" type="submit">Adicionar ao plano</button>
         <button class="btn ghost" type="button" id="addFora">Registrar fora do plano</button>
@@ -418,7 +431,7 @@ function viewPlano(){
     if(!pr){ toast('Escolha o produto'); return $('#prod').focus(); }
     if(orig==='plano' && (!st||!ac||!qd)) return toast('Preencha em que pé está, a ação e o dia');
     const ok = await salvar('criarItem',{semana:state.semana, empresa:emp, deal_id:n?.deal_id||null, valor:val, temp:$('#temp').value,
-      origem:orig, status:st, acao:ac, quando:qd, previsao:$('#pv').value, produto:pr},
+      origem:orig, status:st, acao:ac, quando:qd, previsao:$('#pv').value, produto:pr, observacoes:$('#obs').value.trim()},
       orig==='fora'?`${emp} registrado fora do plano`:`${emp} adicionado ao plano`);
     if(ok) state.puxado=null;
   };
@@ -428,7 +441,7 @@ function viewPlano(){
   $('#view').querySelectorAll('[data-puxar]').forEach(b=>b.addEventListener('click',()=>{
     const f=sug[Number(b.dataset.puxar)];
     state.puxado={empresa:f.empresa, deal_id:f.deal_id};
-    $('#emp').value=f.empresa; if($('#val')) $('#val').value=f.valor||''; $('#temp').value=f.temp; $('#prod').value=f.produto;
+    $('#emp').value=f.empresa; if($('#val')) $('#val').value=f.valor||''; $('#temp').value=f.temp; $('#prod').value=f.produto; $('#obs').value=f.observacoes||'';
     $('#emp').dispatchEvent(new Event('input'));
     $('#st').focus(); toast(`${f.empresa} no formulário: complete status, ação e dia`);
   }));
@@ -906,6 +919,7 @@ function render(){
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
   $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes'].includes(state.tab);
   cur[3]();
+  ligarObs($('#view'));
 }
 
 /* ---------- início ---------- */
