@@ -28,6 +28,9 @@ const nextWeek = w => addDias(w,7);
 const pessoa = n => TIME.find(p=>p.nome===n) || {nome:n, esteira:'vd'};
 const esteiraDe = n => pessoa(n).esteira;
 const membros = () => TIME.filter(p=>p.esteira!=='gs' && p.ativo);
+// Plano mensal é só de vendas: a pré-vendas trabalha com plano semanal
+const temMensal = n => esteiraDe(n)==='vd';
+const vendedores = () => membros().filter(p=>p.esteira==='vd');
 const negocioDe = i => (i.deal_id && CLINT.porId[i.deal_id]) || null;
 const etapa = i => (i.deal_id && (D.etapas[i.deal_id] || negocioDe(i)?.etapa)) || (i.deal_id ? 'Clint' : 'Fora do Clint');
 const prev = i => i.previsao || (esteiraDe(i.dono)==='pv' ? (negocioDe(i)?.data_reuniao || '') : '');
@@ -203,19 +206,18 @@ function viewMes(){
   if($('#congNao')) $('#congNao').addEventListener('click',()=>{state.confirmar=false; render();});
 }
 function viewMesGestor(){
-  const nomes=membros().map(p=>p.nome);
+  const nomes=vendedores().map(p=>p.nome);
   if(state.verMes!=='Todos' && !nomes.includes(state.verMes)) state.verMes='Todos';
   const donos=state.verMes==='Todos'?nomes:[state.verMes];
-  const r=resumoFoto(donos), soPv=donos.every(d=>esteiraDe(d)==='pv');
+  const r=resumoFoto(donos);
   const st=nomes.map(n=>{const F=FOTOS[n]; return `<span class="pill ${F&&F.congelado?'p-good':'p-warn'}">${esc(n)} · ${F&&F.congelado?'congelado em '+fd(F.congelado):F?'em rascunho':'não começou'}</span>`;}).join(' ');
   $('#view').innerHTML=`
   <div class="panel"><h2>Planos mensais de ${MES.label}</h2>
     <div class="form" style="grid-template-columns:minmax(0,220px)"><label class="f" for="verM">Plano de<select id="verM">${['Todos',...nomes].map(n=>`<option ${n===state.verMes?'selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
     <div class="result">${st}</div>
     ${avisosMensal(nomes)}
-    <p class="hint">Rascunhos aparecem na soma para você acompanhar a montagem. A revisão vale a partir do congelamento. O mês segue a semana escolhida no topo.</p>
-    ${soPv?'':painelRevisao(r,false)}
-    ${donos.some(d=>esteiraDe(d)==='pv')?painelRevisao(r,true):''}</div>
+    <p class="hint">O plano mensal é só de vendas. A pré-vendas trabalha com o plano semanal. Rascunhos aparecem na soma para você acompanhar a montagem; a revisão vale a partir do congelamento. O mês segue a semana escolhida no topo.</p>
+    ${painelRevisao(r,false)}</div>
   <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
   <div class="panel"><h2>Negócios do plano mensal</h2>${tabelaFoto(r.linhas,state.verMes==='Todos',false)}</div>
   ${r.fora.length?`<div class="panel"><h2>Ganhos fora do plano mensal</h2><p class="hint">Negócios que ninguém previu no início do mês e viraram venda.</p><ul style="margin:0;padding-left:18px">${r.fora.map(i=>`<li><b>${esc(i.empresa)}</b> · ${esc(i.dono)} · ${brl(i.valor)} · ${wk(i.semana)}</li>`).join('')}</ul></div>`:''}`;
@@ -235,6 +237,7 @@ function avisosMensal(nomes){
   return l.length?`<ul class="aviso-lista">${l.join('')}</ul>`:'';
 }
 function sugestoesDoMes(eu){
+  if(!temMensal(eu)) return [];
   const F=FOTOS[eu]; if(!F || !F.congelado || !MES.semanas.includes(state.semana)) return [];
   return F.itens.filter(f=> f.semana<=state.semana && !desfecho(f,eu).fim
     && !ITENS.some(i=>i.dono===eu && i.semana===state.semana && mesmaConta(i,f)));
@@ -669,7 +672,7 @@ function viewComo(){
     <li><b>Sexta é fechamento.</b> Ganhou, Perdeu ou Rolar. Rolar leva o status junto para a próxima semana.</li>
     <li><b>Pré-vendas alimenta vendas.</b> Reunião realizada com vendedor escolhido vira item no plano dele, marcado para definir o próximo passo.</li>
     <li><b>Fora do plano é um botão.</b> Entra no realizado, fica fora da assertividade.</li>
-    <li><b>Plano mensal.</b> Na primeira semana, cada pessoa lista o funil do mês com a semana prevista e congela. O botão Trazer do plano semanal evita digitar duas vezes. Toda semana, o que estava previsto aparece no plano semanal para puxar com um clique. No fim do mês, "O que aconteceu" mostra o que converteu, perdeu, atrasou e o que veio de fora do plano mensal.</li>
+    <li><b>Plano mensal (só vendas).</b> Na primeira semana, cada vendedor lista o funil do mês com a semana prevista e congela. O botão Trazer do plano semanal evita digitar duas vezes. Toda semana, o que estava previsto aparece no plano semanal para puxar com um clique. No fim do mês, "O que aconteceu" mostra o que converteu, perdeu, atrasou e o que veio de fora do plano mensal.</li>
     <li><b>A busca de empresas vem do Clint.</b> Aparecem os negócios ativos em que você é dono. Empresa fora do Clint também pode entrar no plano.</li></ol></div>`;
 }
 
@@ -686,7 +689,7 @@ const IC = {
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>`;
-const NAV_MEMBRO=()=>[['Plano',[['plano','Meu plano','list',viewPlano],['mes','Plano mensal','cal',viewMes],['fechamento','Fechamento de sexta','check',viewFechamento]]],
+const NAV_MEMBRO=()=>[['Plano',[['plano','Meu plano','list',viewPlano],...(temMensal(me())?[['mes','Plano mensal','cal',viewMes]]:[]),['fechamento','Fechamento de sexta','check',viewFechamento]]],
   ['Resultados',[['meudash','Meu dash','grid',viewMeuDash]]],['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
 const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTime],['mesgs','Planos mensais','cal',viewMesGestor]]],
   ['Resultados',[['geral','Visão geral','grid',viewGeral]]],
@@ -698,7 +701,7 @@ function badge(id){
   if(id==='fechamento'){ const n=ITENS.filter(i=>i.dono===eu&&i.semana===w&&!i.resultado).length; return n?`<span class="badge">${n}</span>`:''; }
   if(id==='mes'){ return !FOTOS[eu]?.congelado?'<span class="badge">!</span>':''; }
   if(id==='time'){ const n=ITENS.filter(i=>i.semana===w&&semPasso(i)).length; return n?`<span class="badge red">${n}</span>`:''; }
-  if(id==='mesgs'){ const n=membros().filter(p=>!FOTOS[p.nome]?.congelado).length; return n?`<span class="badge">${n}</span>`:''; }
+  if(id==='mesgs'){ const n=vendedores().filter(p=>!FOTOS[p.nome]?.congelado).length; return n?`<span class="badge">${n}</span>`:''; }
   if(id==='acessos'){ const n=(D.acessos||[]).filter(a=>a.ativo&&!a.tem_senha).length; return n?`<span class="badge">${n}</span>`:''; }
   return '';
 }
