@@ -127,14 +127,37 @@ function gradeSemanas(linhas){
     const L=linhas.filter(l=>l.semana===w), v=L.filter(l=>esteiraDe(l.dono)==='vd'), p=L.filter(l=>esteiraDe(l.dono)==='pv');
     return `<div class="kpi"><span class="k">${sem(w).label}</span><span class="v">${v.length?brl(v.reduce((a,l)=>a+l.valor,0)):p.length+' reun.'}</span><span class="d">${v.length?v.length+' negócios':''}${v.length&&p.length?' · ':''}${p.length?p.length+' reuniões PV':''}${!L.length?'nada previsto':''}</span></div>`;}).join('')}</div>`;
 }
-function tabelaFoto(linhas, mostrarDono, editavel){
+// formulário de edição de um negócio do plano mensal (mesma linha da tabela)
+function formFoto(f, cols){
+  return `<tr class="edit"><td colspan="${cols}"><form class="form" data-fsave="${f.id}">
+    <label class="f wide" for="fe-emp-${f.id}">Empresa<input id="fe-emp-${f.id}" value="${esc(f.empresa)}"></label>
+    <label class="f wide" for="fe-prod-${f.id}">Produto<select id="fe-prod-${f.id}">${prodOptions(f.produto)}</select></label>
+    ${esteiraDe(me())==='pv'?'':`<label class="f" for="fe-val-${f.id}">Valor (R$)<input id="fe-val-${f.id}" type="number" min="0" step="500" value="${f.valor||''}"></label>`}
+    <label class="f" for="fe-temp-${f.id}">Temperatura<select id="fe-temp-${f.id}">${tempOptions(f.temp)}</select></label>
+    <label class="f" for="fe-sem-${f.id}">Semana prevista<select id="fe-sem-${f.id}">${MES.semanas.map(w=>`<option value="${w}" ${w===f.semana?'selected':''}>${sem(w).label}</option>`).join('')}</select></label>
+    <div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn ghost" type="button" data-fcancel>Cancelar</button></div>
+  </form></td></tr>`;
+}
+function ligarFoto(root){
+  root.querySelectorAll('[data-fedit]').forEach(b=>b.addEventListener('click',()=>{ const id=Number(b.dataset.fedit); state.editFoto=state.editFoto===id?null:id; render(); }));
+  root.querySelectorAll('[data-fcancel]').forEach(b=>b.addEventListener('click',()=>{ state.editFoto=null; render(); }));
+  root.querySelectorAll('form[data-fsave]').forEach(f=>f.addEventListener('submit',async e=>{
+    e.preventDefault(); const id=Number(f.dataset.fsave);
+    const p={id, empresa:$('#fe-emp-'+id).value.trim(), produto:$('#fe-prod-'+id).value, temp:$('#fe-temp-'+id).value, semana:$('#fe-sem-'+id).value,
+      valor:$('#fe-val-'+id)?Number($('#fe-val-'+id).value||0):0};
+    if(!p.empresa) return toast('Informe a empresa'); if(!p.produto) return toast('Escolha o produto');
+    const ok=await api('fotoEditar',p); if(ok){ state.editFoto=null; await carregar(); render(); toast('Plano mensal atualizado'); }
+  }));
+}
+function tabelaFoto(linhas, mostrarDono, editavel, podeEditar=editavel){
   const rows=[...linhas].sort((a,b)=>a.semana.localeCompare(b.semana)).map(l=>{
     const pv=esteiraDe(l.dono)==='pv';
+    const acoes = podeEditar ? `<div class="acoes-linha"><button class="btn sm" data-fedit="${l.id}">${state.editFoto===l.id?'Fechar':'Editar'}</button>${editavel?`<button class="btn sm ghost danger" data-rm="${l.id}">Remover</button>`:''}</div>` : '';
     return `<tr>${mostrarDono?`<td><span class="pill ${pv?'p-pv':'p-vd'}">${esc(l.dono)}</span></td>`:''}
       <td><div class="stack"><b>${esc(l.empresa)}</b><span class="pill p-prod">${esc(l.produto)}</span></div></td>
       <td class="num">${pv?'—':brl(l.valor)}</td><td>${esc(l.temp)}</td><td class="when">${wk(l.semana)}<span class="tag">${dm(l.semana)} a ${dm(addDias(l.semana,4))}</span></td>
       <td>${editavel?'<span class="tag">Rascunho</span>':`<span class="pill ${l.des.c}">${l.des.t}</span>`}</td>
-      <td>${editavel?`<button class="btn sm ghost" data-rm="${l.id}">Remover</button>`:''}</td></tr>`;}).join('');
+      <td>${acoes}</td></tr>${podeEditar&&state.editFoto===l.id?formFoto(l, mostrarDono?7:6):''}`;}).join('');
   return `<div class="tbl"><table><thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>Negócio / lead</th><th class="num">Valor</th><th>Temp.</th><th>Semana prevista</th><th>O que aconteceu</th><th></th></tr></thead>
     <tbody>${rows||`<tr><td colspan="7" class="empty">Nenhum negócio no plano mensal ainda.</td></tr>`}</tbody></table></div>`;
 }
@@ -165,7 +188,8 @@ function viewMes(){
       <p class="hint">Este é o seu plano do início do mês. Ele não muda mais. A coluna "O que aconteceu" acompanha o plano semanal sozinha, para a revisão no fim do mês.</p>
       ${painelRevisao(r,pv)}</div>
     <div class="panel"><h2>Distribuição por semana</h2>${gradeSemanas(r.linhas)}</div>
-    <div class="panel"><h2>Negócios do plano mensal</h2>${tabelaFoto(r.linhas,false,false)}</div>`;
+    <div class="panel"><h2>Negócios do plano mensal</h2><p class="hint">Errou a temperatura, o valor ou a semana? Clique em Editar na linha.</p>${tabelaFoto(r.linhas,false,false,true)}</div>`;
+    ligarFoto($('#view'));
     return;
   }
   const n=F.itens.length;
@@ -208,6 +232,7 @@ function viewMes(){
     await salvar('fotoAdicionar',{mes:MES.id, empresa:emp, deal_id:n?.deal_id||null, produto:pr, valor:val, temp:$('#mTemp').value, semana:$('#mSem').value}, `${emp} entrou no plano mensal`);
   });
   $('#view').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>salvar('fotoRemover',{id:Number(b.dataset.rm)},'Removido do plano mensal')));
+  ligarFoto($('#view'));
   if($('#importarSem')) $('#importarSem').addEventListener('click',async e=>{ e.target.disabled=true; await salvar('fotoImportarSemana',{mes:MES.id}); });
   if($('#congelar')) $('#congelar').addEventListener('click',()=>{state.confirmar=true; render();});
   if($('#congelar2')) $('#congelar2').addEventListener('click',()=>{state.confirmar=true; render(); window.scrollTo({top:0,behavior:'smooth'});});
@@ -285,7 +310,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
       <td class="when">${fd(prev(i))}</td>
       <td><div class="stack">${statusPill(i)}${editavel && !i.resultado ? (state.excluir===i.id
         ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
-        : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Atualizar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}</div></td>
+        : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}</div></td>
     </tr>`;
     if(state.editing!==i.id || !editavel) return main;
     return main + `<tr class="edit"><td colspan="${cols}">
@@ -340,12 +365,12 @@ function viewPlano(){
   $('#view').innerHTML = `
   ${sug.length?`<div class="panel">
     <h2>Do seu plano mensal para a ${wk(state.semana)}</h2>
-    <p class="hint">Negócios do plano mensal de ${MES.label} previstos para esta semana ou atrasados. Puxe para o plano e complete o status, a ação e o dia.</p>
-    <div class="tbl"><table><thead><tr><th>Negócio / lead</th><th class="num">Valor</th><th>Semana prevista</th><th></th></tr></thead><tbody>
+    <p class="hint">Negócios do plano mensal de ${MES.label} previstos para esta semana ou atrasados. Puxe para o plano e complete o status, a ação e o dia. Errou a temperatura, o valor ou a semana? Clique em Editar.</p>
+    <div class="tbl"><table><thead><tr><th>Negócio / lead</th><th class="num">Valor</th><th>Temp.</th><th>Semana prevista</th><th></th></tr></thead><tbody>
     ${sug.map((f,k)=>`<tr><td><div class="stack"><b>${esc(f.empresa)}</b><span class="pill p-prod">${esc(f.produto)}</span></div></td>
-      <td class="num">${pv?'—':brl(f.valor)}</td>
+      <td class="num">${pv?'—':brl(f.valor)}</td><td>${esc(f.temp)}</td>
       <td>${f.semana<state.semana?`<span class="pill p-warn">Atrasado · ${wk(f.semana)}</span>`:wk(f.semana)}</td>
-      <td><button class="btn sm" data-puxar="${k}">Trazer para a semana</button></td></tr>`).join('')}
+      <td><div class="acoes-linha"><button class="btn sm primary" data-puxar="${k}">Trazer para a semana</button><button class="btn sm" data-fedit="${f.id}">${state.editFoto===f.id?'Fechar':'Editar'}</button></div></td></tr>${state.editFoto===f.id?formFoto(f,5):''}`).join('')}
     </tbody></table></div></div>`:''}
   <div class="panel">
     <h2>Novo compromisso na ${wk(state.semana)}</h2>
@@ -376,7 +401,7 @@ function viewPlano(){
   </div>
   <div class="panel">
     <h2>Meu plano · ${s.label}</h2>
-    ${pend?`<p class="hint"><span class="pill p-warn">${pend} sem próximo passo</span> Clique em Atualizar para definir a ação e o dia.</p>`:''}
+    ${pend?`<p class="hint"><span class="pill p-warn">${pend} sem próximo passo</span> Clique em Editar para definir a ação e o dia.</p>`:''}
     ${planoTabela(eu,true)}
   </div>`;
   $('#emp').addEventListener('input',()=>{
@@ -399,6 +424,7 @@ function viewPlano(){
   };
   $('#add').addEventListener('submit',e=>{e.preventDefault(); add('plano');});
   $('#addFora').addEventListener('click',()=>add('fora'));
+  ligarFoto($('#view'));
   $('#view').querySelectorAll('[data-puxar]').forEach(b=>b.addEventListener('click',()=>{
     const f=sug[Number(b.dataset.puxar)];
     state.puxado={empresa:f.empresa, deal_id:f.deal_id};
@@ -793,7 +819,7 @@ function viewComo(){
     <li><b>Cada um entra e vê só o próprio plano.</b> O gestor vê a visão geral e o plano de cada pessoa, sem editar.</li>
     <li><b>Cada compromisso tem a semana carimbada.</b> Os números contam por semana, então nada da semana anterior entra de novo.</li>
     <li><b>Três campos tornam o plano acionável:</b> em que pé está, a ação desta semana e o dia dessa ação. A previsão de fechamento (ou a data da reunião, na pré-vendas) fica ao lado, como forecast.</li>
-    <li><b>Durante a semana, Atualizar.</b> Mudou o status ou a ação, edite a linha. O item continua o mesmo.</li>
+    <li><b>Durante a semana, Editar.</b> Mudou o status, a ação, a temperatura ou o valor? Clique em Editar na linha. O item continua o mesmo.</li>
     <li><b>Sexta é fechamento.</b> Ganhou, Perdeu ou Rolar. Rolar leva o status junto para a próxima semana.</li>
     <li><b>Pré-vendas alimenta vendas.</b> Reunião realizada com vendedor escolhido vira item no plano dele, marcado para definir o próximo passo.</li>
     <li><b>Fora do plano é um botão.</b> Entra no realizado, fica fora da assertividade.</li>
@@ -875,7 +901,7 @@ function render(){
   const cur=flat.find(t=>t[0]===state.tab);
   $('#nav').innerHTML=nav.map(([g,its])=>`<div class="navgroup"><h3>${g}</h3>${its.map(([id,l,ic])=>
     `<button class="nav" data-tab="${id}" ${id===state.tab?'aria-current="page"':''}>${svg(ic)}<span class="lbl">${l}</span>${badge(id)}</button>`).join('')}</div>`).join('');
-  $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.excluir=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
+  $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.excluir=null; state.editFoto=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
   $('#pgEyebrow').textContent=cur[4]; $('#pgTitle').textContent=cur[1];
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
   $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes'].includes(state.tab);
