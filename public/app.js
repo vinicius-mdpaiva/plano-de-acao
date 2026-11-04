@@ -654,6 +654,120 @@ function viewClint(){
   });
 }
 
+
+/* ---------- GESTOR: BASE DE CLIENTES ---------- */
+const INATIVAS=['perdido','ganho','fechado','stand_by','repescagem','nf'];
+const chaveTxt = t => String(t??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+const semAcento = t => String(t??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const cli = state.cli = {lista:null, carregando:false, erro:null, q:'', funil:'', etapa:'', dono:'', limite:50, sel:null, det:null};
+async function carregarClientes(){
+  cli.carregando=true; cli.erro=null;
+  try{ const r=await fetch('/api/clientes',{cache:'no-store'}); const j=await r.json(); if(!j.ok) throw new Error(j.erro); cli.lista=j.lista.map(n=>({...n, _busca:semAcento([n.empresa,n.contato_nome,n.contato_email,n.contato_telefone,n.dono,n.dono_email,n.deal_id,n.etapa].join(' '))})); }
+  catch(e){ cli.erro=e.message; }
+  cli.carregando=false;
+}
+function quemVe(n){
+  const email=(n.dono_email||'').toLowerCase(), nome=chaveTxt(n.dono).replace(/_/g,'');
+  const u=(D.acessos||[]).find(a=>a.ativo && ((email && (a.email_clint||a.login||'').toLowerCase()===email) || (!email && nome && chaveTxt(a.nome).replace(/_/g,'')===nome)));
+  return u?u.nome:null;
+}
+function filtrarClientes(){
+  const q=semAcento(cli.q.trim());
+  return (cli.lista||[]).filter(n=>{
+    if(cli.funil && n.funil!==cli.funil) return false;
+    const inat=INATIVAS.includes(chaveTxt(n.etapa));
+    if(cli.etapa==='ativas' && inat) return false;
+    if(cli.etapa==='encerradas' && !inat) return false;
+    if(cli.dono==='__sem' && (n.dono||n.dono_email)) return false;
+    if(cli.dono && cli.dono!=='__sem' && (n.dono_email||n.dono)!==cli.dono) return false;
+    return !q || n._busca.includes(q);
+  });
+}
+function linhasClientes(){
+  const L=filtrarClientes(), vis=L.slice(0,cli.limite);
+  $('#cliTotal').textContent=`${L.length.toLocaleString('pt-BR')} de ${(cli.lista||[]).length.toLocaleString('pt-BR')} negócios`;
+  $('#cliLista').innerHTML = vis.length ? `<div class="tbl"><table><thead><tr><th>Empresa</th><th>Contato</th><th>Etapa</th><th>Dono no Clint</th><th class="num">Valor</th><th>Atualizado</th></tr></thead><tbody>
+    ${vis.map(n=>`<tr class="clicavel ${cli.sel===n.deal_id?'sel':''}" data-cli="${esc(n.deal_id)}" tabindex="0">
+      <td><div class="stack"><b>${n.empresa?esc(n.empresa):'<span class="tag">Sem empresa</span>'}</b><span class="pill ${n.funil==='fitfeed'?'p-pv':'p-vd'}">${esc((n.funil||'?').toUpperCase())}</span></div></td>
+      <td class="txt">${esc(n.contato_nome||'—')}<span class="tag">${esc(n.contato_email||'')}</span><span class="tag">${esc(n.contato_telefone||'')}</span></td>
+      <td>${esc(n.etapa||'—')}<span class="tag">${INATIVAS.includes(chaveTxt(n.etapa))?'encerrado ou parado':'ativo'}</span></td>
+      <td class="txt">${esc(n.dono||'—')}<span class="tag">${esc(n.dono_email||'')}</span></td>
+      <td class="num">${n.valor?brl(n.valor):'—'}</td>
+      <td class="when">${n.atualizado_em?`${n.atualizado_em.slice(8,10)}/${n.atualizado_em.slice(5,7)} ${n.atualizado_em.slice(11)}`:'—'}</td></tr>`).join('')}
+    </tbody></table></div>${L.length>vis.length?`<div><button class="btn" id="cliMais" type="button">Mostrar mais 50</button></div>`:''}`
+    : '<p class="empty">Nenhum negócio com esses filtros.</p>';
+  $('#cliLista').querySelectorAll('[data-cli]').forEach(tr=>{ const abrir=()=>abrirCliente(tr.dataset.cli); tr.addEventListener('click',abrir); tr.addEventListener('keydown',e=>{ if(e.key==='Enter') abrir(); }); });
+  if($('#cliMais')) $('#cliMais').addEventListener('click',()=>{ cli.limite+=50; linhasClientes(); });
+}
+async function abrirCliente(id){
+  cli.sel=id; cli.det={carregando:true}; detalheCliente(); linhasClientes();
+  try{ const r=await fetch('/api/clientes?id='+encodeURIComponent(id),{cache:'no-store'}); const j=await r.json(); if(!j.ok) throw new Error(j.erro); cli.det=j; }
+  catch(e){ cli.det={erro:e.message}; }
+  detalheCliente(); $('#cliDet').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function detalheCliente(){
+  const box=$('#cliDet'); if(!box) return;
+  if(!cli.sel){ box.innerHTML=''; box.hidden=true; return; }
+  box.hidden=false;
+  const d=cli.det||{};
+  if(d.carregando){ box.innerHTML='<p class="hint">Carregando…</p>'; return; }
+  if(d.erro){ box.innerHTML=`<p class="err">${esc(d.erro)}</p>`; return; }
+  const n=d.negocio, ve=quemVe(n), rot=(n.empresa||n.contato_nome||'Sem nome').trim();
+  const campo=(k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v||'<span class="tag">vazio</span>'}</span></div>`;
+  box.innerHTML=`
+    <div class="det-head"><div><h2>${esc(rot)}</h2><p class="hint">ID no Clint: <code>${esc(n.deal_id)}</code></p></div><button class="btn sm ghost" id="cliFechar" type="button">Fechar</button></div>
+    <div class="kvs">
+      ${campo('Empresa',esc(n.empresa))}${campo('Contato',esc(n.contato_nome))}${campo('E-mail do contato',esc(n.contato_email))}${campo('Telefone',esc(n.contato_telefone))}
+      ${campo('Funil',esc((n.funil||'').toUpperCase()))}${campo('Origem',esc(n.origem))}${campo('Etapa',esc(n.etapa))}${campo('Status',esc(n.status))}
+      ${campo('Dono no Clint',esc(n.dono))}${campo('E-mail do dono',esc(n.dono_email))}${campo('Valor',n.valor?brl(n.valor):'')}${campo('Reunião agendada',n.data_reuniao_txt?fd(n.data_reuniao_txt):'')}
+      ${campo('Criado em',n.criado_em?new Date(n.criado_em).toLocaleString('pt-BR'):'')}${campo('Atualizado em',n.atualizado_em?new Date(n.atualizado_em).toLocaleString('pt-BR'):'')}
+    </div>
+    <div class="dica-cli">
+      <p><b>Na busca do plano aparece como:</b> ${esc(rot)}</p>
+      <p><b>Quem vê na busca:</b> ${ve?esc(ve):'<span class="pill p-warn">ninguém</span> o dono no Clint não bate com nenhum acesso (confira o e-mail no Clint em Acessos)'}${INATIVAS.includes(chaveTxt(n.etapa))?' · <span class="pill p-open">fora da busca: etapa encerrada ou parada</span>':''}</p>
+    </div>
+    <h3>No plano de ação</h3>
+    ${d.planos.length?`<ul class="lista-simples">${d.planos.map(p=>`<li>${wk(p.semana)} · ${esc(p.dono)} · lançado como <b>${esc(p.empresa)}</b>${p.resultado?` · ${RES[p.resultado]?.[0]||p.resultado}`:''}</li>`).join('')}</ul>`:'<p class="hint">Ainda não aparece em nenhum plano.</p>'}
+    <h3>Últimos envios do Clint</h3>
+    ${d.eventos.length?d.eventos.map(e=>`<details class="evento"><summary>${esc(e.quando)} · ${esc(e.gatilho||'envio')} ${e.erro?`<span class="pill p-bad">${esc(e.erro)}</span>`:''}</summary>
+      <div class="tbl"><table><tbody>${Object.entries(e.payload||{}).map(([k,v])=>`<tr><td class="nowrap"><code>${esc(k)}</code></td><td>${esc(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')
+      :'<p class="hint">Nenhum envio do Clint para este negócio ainda. Os dados vieram da importação por CSV.</p>'}`;
+  $('#cliFechar').addEventListener('click',()=>{ cli.sel=null; cli.det=null; detalheCliente(); linhasClientes(); });
+}
+function exportarClientes(){
+  const L=filtrarClientes(), cols=['deal_id','funil','empresa','contato_nome','contato_email','contato_telefone','etapa','status','dono','dono_email','valor','origem','criado_em','atualizado_em'];
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const csv='﻿'+[cols.join(';'),...L.map(n=>cols.map(c=>q(n[c])).join(';'))].join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=`base-clientes-${HOJE}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+async function viewClientes(){
+  const donos=[...new Map((cli.lista||[]).filter(n=>n.dono||n.dono_email).map(n=>[n.dono_email||n.dono, n.dono||n.dono_email])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'));
+  $('#view').innerHTML=`
+  <div class="panel" id="cliDet" hidden></div>
+  <div class="panel">
+    <h2>Base de clientes</h2>
+    <p class="hint">Todos os negócios que chegaram do Clint, pelo webhook ou pela importação. Clique em uma linha para ver os dados completos, quem vê o negócio na busca do plano e o que o Clint enviou.</p>
+    <div class="form cli-filtros">
+      <label class="f wide" for="cliQ">Buscar<input id="cliQ" type="search" placeholder="Empresa, contato, e-mail, telefone, dono ou ID" value="${esc(cli.q)}" autocomplete="off"></label>
+      <label class="f" for="cliF">Funil<select id="cliF"><option value="">Todos</option><option value="wbc" ${cli.funil==='wbc'?'selected':''}>WBC</option><option value="fitfeed" ${cli.funil==='fitfeed'?'selected':''}>FitFeed</option></select></label>
+      <label class="f" for="cliE">Etapa<select id="cliE"><option value="">Todas</option><option value="ativas" ${cli.etapa==='ativas'?'selected':''}>Só ativas</option><option value="encerradas" ${cli.etapa==='encerradas'?'selected':''}>Encerradas ou paradas</option></select></label>
+      <label class="f" for="cliD">Dono<select id="cliD"><option value="">Todos</option><option value="__sem" ${cli.dono==='__sem'?'selected':''}>Sem dono</option>${donos.map(([k,l])=>`<option value="${esc(k)}" ${cli.dono===k?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
+      <div class="actions"><button class="btn sm" id="cliExp" type="button">Exportar CSV</button><button class="btn sm ghost" id="cliRec" type="button">Recarregar</button><span class="hint" id="cliTotal" style="align-self:center"></span></div>
+    </div>
+    <div id="cliLista">${cli.carregando||!cli.lista?'<p class="hint">Carregando a base…</p>':''}</div>
+  </div>`;
+  if(cli.erro){ $('#cliLista').innerHTML=`<p class="err">${esc(cli.erro)}</p>`; }
+  if(!cli.lista && !cli.carregando){ await carregarClientes(); if(state.tab==='clientes') viewClientes(); return; }
+  if(!cli.lista) return;
+  linhasClientes(); detalheCliente();
+  let t; $('#cliQ').addEventListener('input',e=>{ clearTimeout(t); t=setTimeout(()=>{ cli.q=e.target.value; cli.limite=50; linhasClientes(); },150); });
+  $('#cliF').addEventListener('change',e=>{ cli.funil=e.target.value; cli.limite=50; linhasClientes(); });
+  $('#cliE').addEventListener('change',e=>{ cli.etapa=e.target.value; cli.limite=50; linhasClientes(); });
+  $('#cliD').addEventListener('change',e=>{ cli.dono=e.target.value; cli.limite=50; linhasClientes(); });
+  $('#cliExp').addEventListener('click',exportarClientes);
+  $('#cliRec').addEventListener('click',async()=>{ cli.lista=null; await viewClientes(); });
+}
+
 /* ---------- conta ---------- */
 function viewConta(obrigatorio){
   $('#view').innerHTML=`<div class="panel" style="max-width:560px">
@@ -695,13 +809,14 @@ const IC = {
   key:'<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M17 6l3 3M15 8l2 2"/>',
   db:'<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>`;
 const NAV_MEMBRO=()=>[['Plano',[['plano','Meu plano','list',viewPlano],...(temMensal(me())?[['mes','Plano mensal','cal',viewMes]]:[]),['fechamento','Fechamento de sexta','check',viewFechamento]]],
   ['Resultados',[['meudash','Meu dash','grid',viewMeuDash]]],['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
 const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTime],['mesgs','Planos mensais','cal',viewMesGestor]]],
   ['Resultados',[['geral','Visão geral','grid',viewGeral]]],
-  ['Administração',[['acessos','Acessos','key',viewAcessos],['clint','Dados do Clint','db',viewClint]]],
+  ['Administração',[['clientes','Base de clientes','search',viewClientes],['acessos','Acessos','key',viewAcessos],['clint','Dados do Clint','db',viewClint]]],
   ['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
 function badge(id){
   const eu=me(), w=state.semana;
@@ -760,7 +875,7 @@ function render(){
   $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.excluir=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
   $('#pgEyebrow').textContent=cur[4]; $('#pgTitle').textContent=cur[1];
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
-  $('#ctxSemana').hidden = ['acessos','clint','como','conta'].includes(state.tab);
+  $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes'].includes(state.tab);
   cur[3]();
 }
 
