@@ -182,11 +182,12 @@ function painelRevisao(r, pv){
       <div class="kpi"><span class="k">Ganho fora do plano mensal</span><span class="v">${brl(r.foraV)}</span><span class="d">${r.fora.length} negócios que surgiram no mês</span></div></div>`;
 }
 function datalistClint(id){
-  return `<datalist id="${id}">${Object.values(CLINT.porRotulo).sort((a,b)=>a.rotulo.localeCompare(b.rotulo,'pt-BR')).map(n=>`<option value="${esc(n.rotulo)}" label="${esc(n.etapa||'')}">`).join('')}</datalist>`;
+  return `<datalist id="${id}">${Object.values(CLINT.porRotulo).sort((a,b)=>Number(!!b.meu)-Number(!!a.meu) || a.rotulo.localeCompare(b.rotulo,'pt-BR')).map(n=>`<option value="${esc(n.rotulo)}" label="${esc([n.etapa, n.meu?'seu':(n.dono_nome?'dono: '+n.dono_nome:'sem dono')].filter(Boolean).join(' · '))}">`).join('')}</datalist>`;
 }
 function infoClint(n, pv){
   if(!n) return 'Empresa fora do Clint: ela entra no plano mesmo assim.';
-  return `No Clint: etapa <b>${esc(n.etapa||'—')}</b>${n.valor?` · valor <b>${brl(n.valor)}</b>`:''}${pv&&n.data_reuniao?` · reunião <b>${fd(n.data_reuniao)}</b>`:''}`;
+  const dono = n.meu ? '' : ` · dono no Clint: <b>${esc(n.dono_nome||'sem dono')}</b>`;
+  return `No Clint: etapa <b>${esc(n.etapa||'—')}</b>${dono}${n.valor?` · valor <b>${brl(n.valor)}</b>`:''}${pv&&n.data_reuniao?` · reunião <b>${fd(n.data_reuniao)}</b>`:''}${n.meu?'':'<br><span class="tag">Passagem de bastão? Pode lançar normalmente. Lembre de trocar o dono no Clint.</span>'}`;
 }
 function viewMes(){
   const eu=me(), pv=esteiraDe(eu)==='pv', F=FOTOS[eu] || {congelado:null,itens:[]};
@@ -220,7 +221,7 @@ function viewMes(){
       <label class="f" for="mTemp">Temperatura<select id="mTemp">${tempOptions('Morno')}</select></label>
       <label class="f" for="mSem">Semana prevista<select id="mSem">${MES.semanas.map(w=>`<option value="${w}">${sem(w).label}</option>`).join('')}</select></label>
       ${obsCampo('mObs','')}
-      <p class="clint" id="mInfo">Busque pela empresa ou pelo contato. A lista traz todos os seus negócios no Clint. Não achou? Digite o nome mesmo assim.</p>
+      <p class="clint" id="mInfo">Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.</p>
       <div class="actions"><button class="btn primary" type="submit">Adicionar ao plano mensal</button></div>
     </form>
     ${datalistClint('clintM')}</div>
@@ -232,7 +233,7 @@ function viewMes(){
     ${n&&!state.confirmar?`<div><button class="btn" id="congelar2" type="button">Concluir plano mensal</button></div>`:''}</div>`;
   $('#mEmp').addEventListener('input',()=>{
     const n=CLINT.porRotulo[$('#mEmp').value.trim()];
-    $('#mInfo').innerHTML = n ? infoClint(n,pv) : 'Busque pela empresa ou pelo contato. A lista traz todos os seus negócios no Clint. Não achou? Digite o nome mesmo assim.';
+    $('#mInfo').innerHTML = n ? infoClint(n,pv) : 'Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.';
     if(n && n.valor && $('#mVal') && !$('#mVal').value) $('#mVal').value=n.valor;
   });
   $('#addM').addEventListener('submit',async e=>{e.preventDefault();
@@ -395,7 +396,7 @@ function viewPlano(){
         <select id="temp">${tempOptions('Morno')}</select></label>
       <label class="f wide" for="prod">${pv?'Produto de interesse':'Produto'}
         <select id="prod">${prodOptions('')}</select></label>
-      <p class="clint" id="clintInfo">Busque pela empresa ou pelo contato. A lista traz todos os seus negócios no Clint. Não achou? Digite o nome mesmo assim.</p>
+      <p class="clint" id="clintInfo">Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.</p>
       <label class="f wide" for="st">Em que pé está
         <input id="st" placeholder="${pv?'Ex.: respondeu o 3º toque, quer entender preço':'Ex.: proposta enviada, aguardando o sócio'}"></label>
       <label class="f wide" for="ac">Ação desta semana
@@ -419,7 +420,7 @@ function viewPlano(){
   </div>`;
   $('#emp').addEventListener('input',()=>{
     const n=CLINT.porRotulo[$('#emp').value.trim()];
-    $('#clintInfo').innerHTML = n ? infoClint(n,pv) : 'Busque pela empresa ou pelo contato. A lista traz todos os seus negócios no Clint. Não achou? Digite o nome mesmo assim.';
+    $('#clintInfo').innerHTML = n ? infoClint(n,pv) : 'Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.';
     if(n){ if($('#val') && !$('#val').value && n.valor) $('#val').value=n.valor; if(pv && n.data_reuniao && !$('#pv').value) $('#pv').value=n.data_reuniao; }
   });
   const add = async orig => {
@@ -672,7 +673,7 @@ function viewClint(){
     <div class="kpi"><span class="k">Último evento do Clint</span><span class="v" style="font-size:16px">${s.ultimo_evento?new Date(s.ultimo_evento).toLocaleString('pt-BR'):'Nenhum ainda'}</span><span class="d">webhooks</span></div>
     <div class="kpi"><span class="k">Eventos em 24h</span><span class="v">${s.eventos_24h??0}</span><span class="d">criação, etapa e status</span></div>
     <div class="kpi"><span class="k">Com erro em 7 dias</span><span class="v">${s.erros_7d??0}</span><span class="d">ver tabela clint_eventos</span></div>
-    <div class="kpi"><span class="k">Negócios no banco</span><span class="v">${s.negocios_total??0}</span><span class="d">${D.negocios.length} com dono</span></div></div></div>
+    <div class="kpi"><span class="k">Negócios no banco</span><span class="v">${s.negocios_total??0}</span><span class="d">${D.negocios.filter(n=>n.dono||n.dono_email).length} com dono</span></div></div></div>
   <div class="panel"><h2>Importar exportação do Clint</h2>
     <p class="hint">Use para a carga inicial e sempre que quiser reconciliar. Exporte os negócios de cada funil no Clint (CSV) e envie aqui. O funil é detectado pela origem. Importar de novo atualiza sem duplicar.</p>
     <div class="form"><label class="f wide" for="csvs">Arquivos CSV<input id="csvs" type="file" accept=".csv,text/csv" multiple></label>
