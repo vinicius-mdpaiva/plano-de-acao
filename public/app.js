@@ -673,7 +673,7 @@ function viewClint(){
     <div class="kpi"><span class="k">Último evento do Clint</span><span class="v" style="font-size:16px">${s.ultimo_evento?new Date(s.ultimo_evento).toLocaleString('pt-BR'):'Nenhum ainda'}</span><span class="d">webhooks</span></div>
     <div class="kpi"><span class="k">Eventos em 24h</span><span class="v">${s.eventos_24h??0}</span><span class="d">criação, etapa e status</span></div>
     <div class="kpi"><span class="k">Com erro em 7 dias</span><span class="v">${s.erros_7d??0}</span><span class="d">ver tabela clint_eventos</span></div>
-    <div class="kpi"><span class="k">Negócios no banco</span><span class="v">${s.negocios_total??0}</span><span class="d">${D.negocios.filter(n=>n.dono||n.dono_email).length} com dono</span></div></div></div>
+    <div class="kpi"><span class="k">Negócios no banco</span><span class="v">${(s.negocios_total??0).toLocaleString('pt-BR')}</span><span class="d">${D.negocios.filter(n=>n.dono||n.dono_email).length.toLocaleString('pt-BR')} com dono · aviso em ${(s.limite_busca||0).toLocaleString('pt-BR')}</span></div></div></div>
   <div class="panel"><h2>Importar exportação do Clint</h2>
     <p class="hint">Use para a carga inicial e sempre que quiser reconciliar. Exporte os negócios de cada funil no Clint (CSV) e envie aqui. O funil é detectado pela origem. Importar de novo atualiza sem duplicar.</p>
     <div class="form"><label class="f wide" for="csvs">Arquivos CSV<input id="csvs" type="file" accept=".csv,text/csv" multiple></label>
@@ -901,6 +901,13 @@ function montarCasca(){
     r.setAttribute('data-theme',novo); try{localStorage.setItem('wbc-plano-tema',novo);}catch(e){}
   });
 }
+// Lembrete para o gestor: a busca do plano carrega a base inteira; acima do limite, trocar por busca no servidor
+function avisoLimiteBusca(){
+  const s=D.saude||{}, tot=Number(s.negocios_total||0), lim=Number(s.limite_busca||0);
+  if(!lim || tot<lim) return '';
+  return `<div class="aviso-limite"><b>A base do Clint passou de ${lim.toLocaleString('pt-BR')} negócios (hoje: ${tot.toLocaleString('pt-BR')}).</b>
+    <span>A busca do plano carrega a base inteira para cada pessoa e começa a ficar lenta, principalmente no celular. Hora de trocar por uma busca que consulta o servidor enquanto a pessoa digita. Peça ao Claude: "trocar a busca do plano de ação por busca no servidor".</span></div>`;
+}
 function render(){
   const u=D.usuario, gestor=souGestor(), p=pessoa(u.nome);
   $('#av').textContent=u.nome.slice(0,1); $('#av').className='avatar av-'+(u.esteira||'vd');
@@ -920,6 +927,7 @@ function render(){
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
   $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes'].includes(state.tab);
   cur[3]();
+  if(gestor) $('#view').insertAdjacentHTML('afterbegin', avisoLimiteBusca());
   ligarObs($('#view'));
 }
 
