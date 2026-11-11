@@ -605,7 +605,13 @@ function calcPessoa(n,w){
   const comp=plano.reduce((a,i)=>a+i.valor,0), pond=plano.filter(i=>!i.resultado).reduce((a,i)=>a+i.valor*(PROB[i.temp]||.6),0);
   const ganho=plano.filter(i=>i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
   const fora=S.filter(i=>i.origem==='fora'&&i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
-  const s=sem(w), prevSem=S.filter(i=>!i.resultado && prev(i)>=s.ini && prev(i)<=addDias(s.ini,6)).reduce((a,i)=>a+i.valor,0);
+  // Previsto na semana: só o que está ABERTO (sem ganho, perdido ou rolado) com previsão de fechamento nesta semana.
+  // Inclui item aberto esquecido em semana anterior; o mesmo negócio conta uma vez só (vale o lançamento mais recente).
+  const s=sem(w), fimSem=addDias(s.ini,6), vistos=[];
+  const prevSem=ITENS.filter(i=>i.dono===n && i.semana<=w && !i.resultado && prev(i)>=s.ini && prev(i)<=fimSem)
+    .sort((a,b)=>b.semana.localeCompare(a.semana))
+    .filter(i=>{ if(vistos.some(v=>mesmaConta(v,i))) return false; vistos.push(i); return true; })
+    .reduce((a,i)=>a+i.valor,0);
   return {S,comp,pond,ganho,fora,prevSem,ass:comp?Math.round(ganho/comp*100):0,aberto:S.filter(i=>!i.resultado).length,
     pv:S.filter(i=>i.origem==='pv').length};
 }
