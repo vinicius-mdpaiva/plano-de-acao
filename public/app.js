@@ -737,31 +737,28 @@ function calcMes(n){
 const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 /* ---------- resumo diário para o WhatsApp (só gestor, na Visão geral) ---------- */
 // *negrito* e _itálico_ no formato do WhatsApp
-function resumoWhatsApp(){
-  const w=state.semana, s=sem(w), fimSem=addDias(w,4);
-  const agora=new Date(), hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'});
-  const L=[];
-  L.push(`*Plano de ação · ${wk(w)} (${dm(w)} a ${dm(fimSem)})*`);
-  L.push(`_Posição de ${fd(HOJE)}, ${hora}_`);
-  // vendas: negócios ainda abertos no plano da semana (cada negócio uma vez)
+function resumoWhatsApp(){ return state.geralModo==='mes' ? resumoWhatsAppMes() : resumoWhatsAppSemana(); }
+const horaAgora = () => new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'});
+// SEMANA: só o que ainda está para fechar na semana (previsão de fechamento entre segunda e domingo)
+function resumoWhatsAppSemana(){
+  const w=state.semana, fimSem=addDias(w,6), L=[];
+  L.push(`*Plano de ação · ${wk(w)} (${dm(w)} a ${dm(addDias(w,4))})*`);
+  L.push(`_Posição de ${fd(HOJE)}, ${horaAgora()}_`);
   const vds=TIME.filter(p=>p.esteira==='vd'&&p.ativo);
-  let total=0, qtd=0, prevTot=0, ganhoTot=0;
+  let total=0, qtd=0, ganhoTot=0;
   const blocos=vds.map(p=>{
-    const S=ITENS.filter(i=>i.dono===p.nome && i.semana===w && i.origem!=='fora');
-    const G=negociosDe(S).map(g=>g.ref);
-    const abertos=G.filter(i=>!i.resultado).sort((a,b)=>(b.valor||0)-(a.valor||0));
-    const soma=abertos.reduce((a,i)=>a+(i.valor||0),0);
-    const ganho=G.filter(i=>i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0)
-      + ITENS.filter(i=>i.dono===p.nome && i.semana===w && i.origem==='fora' && i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
-    const prevSemana=abertos.filter(i=>prev(i)>=w && prev(i)<=addDias(w,6)).reduce((a,i)=>a+(i.valor||0),0);
-    total+=soma; qtd+=abertos.length; prevTot+=prevSemana; ganhoTot+=ganho;
-    const linhas=abertos.map(i=>`• ${i.empresa} · ${brl(i.valor)} · ${i.temp}${prev(i)?` · fecha ${dm(prev(i))}`:''}`);
-    return [`*${p.nome}* · ${brl(soma)} em ${abertos.length} ${abertos.length===1?'negócio':'negócios'}${ganho?` · ganho na semana ${brl(ganho)}`:''}`,
-            ...(linhas.length?linhas:['• nada em aberto no plano da semana'])].join('\n');
+    // abertos com previsão nesta semana, inclusive os lançados em semanas anteriores; cada negócio uma vez
+    const G=negociosDe(ITENS.filter(i=>i.dono===p.nome && i.semana<=w && i.origem!=='fora')).map(g=>g.ref);
+    const naSemana=G.filter(i=>!i.resultado && prev(i)>=w && prev(i)<=fimSem).sort((a,b)=>prev(a).localeCompare(prev(b))||(b.valor||0)-(a.valor||0));
+    const soma=naSemana.reduce((a,i)=>a+(i.valor||0),0);
+    const ganho=ITENS.filter(i=>i.dono===p.nome && i.semana===w && i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
+    total+=soma; qtd+=naSemana.length; ganhoTot+=ganho;
+    const linhas=naSemana.map(i=>`• ${i.empresa} · ${brl(i.valor)} · fecha ${fd(prev(i))}`);
+    return [`*${p.nome}* · ${brl(soma)} em ${naSemana.length} ${naSemana.length===1?'negócio':'negócios'}${ganho?` · ganho na semana ${brl(ganho)}`:''}`,
+            ...(linhas.length?linhas:['• nada previsto para fechar nesta semana'])].join('\n');
   });
-  L.push('', '*VENDAS · em aberto na semana*', '', blocos.join('\n\n'));
-  L.push('', `*Total em aberto: ${brl(total)}* (${qtd} ${qtd===1?'negócio':'negócios'})`);
-  L.push(`Previsão de fechar nesta semana: ${brl(prevTot)}`);
+  L.push('', '*VENDAS · para fechar nesta semana*', '', blocos.join('\n\n'));
+  L.push('', `*Total para fechar na semana: ${brl(total)}* (${qtd} ${qtd===1?'negócio':'negócios'})`);
   if(ganhoTot) L.push(`Ganho na semana até agora: ${brl(ganhoTot)}`);
   // pré-vendas: reuniões ainda agendadas na semana
   const pvs=TIME.filter(p=>p.esteira==='pv'&&p.ativo).map(p=>p.nome);
@@ -776,10 +773,42 @@ function resumoWhatsApp(){
   L.push(`Na semana até agora: ${real} ${real===1?'realizada':'realizadas'} · ${ns} no-show${atrasadas?` · ${atrasadas} sem desfecho marcado`:''}`);
   return L.join('\n');
 }
+// MÊS: relatório completo (mesma regra da Visão geral do mês: cada negócio uma vez)
+function resumoWhatsAppMes(){
+  const L=[], fimMes=addDias(MES.semanas[MES.semanas.length-1],6);
+  L.push(`*Plano de ação · ${MES.label}*`);
+  L.push(`_Posição de ${fd(HOJE)}, ${horaAgora()}_`);
+  const V=TIME.filter(p=>p.esteira==='vd'&&p.ativo).map(p=>({p,c:calcMes(p.nome)}));
+  const sv=k=>V.reduce((a,x)=>a+(x.c[k]||0),0);
+  L.push('', '*VENDAS*', '');
+  V.forEach(({p,c})=>{
+    L.push(`*${p.nome}*`);
+    L.push(`Projetado ${brl(c.proj)} · ganho ${brl(c.ganho)}${c.fora?` (+ ${brl(c.fora)} fora do plano)`:''} · perdido ${brl(c.perdido)}`);
+    L.push(`Em aberto ${brl(c.ativo)}, dos quais ${brl(c.prevMes)} com previsão de fechar no mês${c.prox?` · ${brl(c.prox)} rolaram para o mês seguinte`:''}`);
+    L.push('');
+  });
+  const proj=sv('proj'), ganho=sv('ganho'), fora=sv('fora');
+  L.push(`*Time: projetado ${brl(proj)}*`);
+  L.push(`• Ganho: ${brl(ganho)} (${proj?Math.round(ganho/proj*100):0}% do projetado)${fora?` + ${brl(fora)} fora do plano`:''}`);
+  L.push(`• Perdido: ${brl(sv('perdido'))}`);
+  L.push(`• Ainda em aberto: ${brl(sv('ativo'))} · previsto para fechar até ${dm(fimMes)}: ${brl(sv('prevMes'))}`);
+  if(sv('prox')) L.push(`• Rolou para o mês seguinte: ${brl(sv('prox'))}`);
+  const P=TIME.filter(p=>p.esteira==='pv'&&p.ativo).map(p=>({p,c:calcMes(p.nome)}));
+  const sp=k=>P.reduce((a,x)=>a+(x.c[k]||0),0);
+  const real=sp('real'), ns=sp('ns'), show=(real+ns)?Math.round(real/(real+ns)*100):null;
+  const pvs=P.map(x=>x.p.nome), dataR=i=>i.previsao||i.quando||'';
+  const ainda=ITENS.filter(i=>pvs.includes(i.dono) && MES.semanas.includes(i.semana) && !i.resultado && (!dataR(i)||dataR(i)>=HOJE)).length;
+  L.push('', '*PRÉ-VENDAS*', '');
+  L.push(`• Reuniões agendadas no mês: ${sp('agend')}`);
+  L.push(`• Realizadas: ${real}${show===null?'':` (show rate ${show}%)`} · no-show: ${ns}${sp('reag')?` (${sp('reag')} reagendaram)`:''}`);
+  L.push(`• Passadas a vendas: ${sp('handoffs')} · viraram venda: ${sp('ganhosGerados')} · em negociação: ${sp('emNeg')}`);
+  L.push(`• Ainda agendadas no mês: ${ainda}`);
+  return L.join('\n');
+}
 function painelWhatsApp(){
   if(!state.zap) return '';
   const t=resumoWhatsApp();
-  return `<div class="panel zap"><div class="zap-h"><h2>Resumo para o WhatsApp · ${wk(state.semana)}</h2><button class="btn sm ghost" id="zapFechar" type="button">Fechar</button></div>
+  return `<div class="panel zap"><div class="zap-h"><h2>Resumo para o WhatsApp · ${state.geralModo==='mes'?MES.label:wk(state.semana)}</h2><button class="btn sm ghost" id="zapFechar" type="button">Fechar</button></div>
     <p class="hint">Confira e, se quiser, ajuste o texto antes de copiar. Os asteriscos viram negrito no WhatsApp.</p>
     <textarea id="zapTxt" rows="18" spellcheck="false">${esc(t)}</textarea>
     <div class="actions" style="margin-top:12px"><button class="btn primary" id="zapCopiar" type="button">Copiar texto</button>
