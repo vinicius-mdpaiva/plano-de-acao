@@ -360,7 +360,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
       <td class="when">${fd(prev(i))}</td>
-      <td><div class="stack">${statusPill(i)}${editavel && !i.resultado ? (state.excluir===i.id
+      <td><div class="stack">${statusPill(i)}${editavel && i.resultado==='noshow' ? `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Corrigir'}</button></div>` : ''}${editavel && !i.resultado ? (state.excluir===i.id
         ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
         : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}${gestor ? (state.gExcluir===i.id
         ? `<div class="acoes-linha"><span class="tag">Excluir do plano de ${esc(i.dono.split(' ')[0])}?</span><button class="btn sm danger" data-gdelok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-gdelno>Cancelar</button></div>`
@@ -386,9 +386,11 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
         ${pv?'':`<label class="f" for="e-val-${i.id}">Valor (R$)<input id="e-val-${i.id}" type="number" min="0" step="500" value="${i.valor||''}"></label>`}
         ${obsCampo('e-obs-'+i.id, i.observacoes)}
         <label class="f" for="e-res-${i.id}">Desfecho<select id="e-res-${i.id}" data-desf>
-          <option value="">Em aberto</option>${pv
+          ${i.resultado==='noshow'
+            ? '<option value="noshow" selected>No-show · não reagendou</option><option value="reagendada">No-show · reagendou</option><option value="realizada">Reunião realizada</option>'
+            : `<option value="">Em aberto</option>${pv
             ? '<option value="realizada">Reunião realizada</option><option value="reagendada">No-show · reagendou</option><option value="noshow">No-show · não reagendou</option>'
-            : '<option value="ganhou">Ganhou</option><option value="perdeu">Perdeu</option>'}</select></label>
+            : '<option value="ganhou">Ganhou</option><option value="perdeu">Perdeu</option>'}`}</select></label>
         ${extrasDesfecho('e-'+i.id, s.ini)}
         <div class="actions"><button class="btn primary" type="submit">Salvar</button></div>
       </form></td></tr>`;
@@ -466,7 +468,7 @@ function ligarTabela(root){
       previsao:$('#e-prev-'+id).value, temp:$('#e-temp-'+id).value, produto:$('#e-prod-'+id).value,
       valor:$('#e-val-'+id)?Number($('#e-val-'+id).value||0):0, observacoes:$('#e-obs-'+id).value.trim()};
     if(!p.produto) return toast('Escolha o produto');
-    const r=$('#e-res-'+id).value, fim = r ? lerDesfecho('e-'+id, r) : null;
+    const r0=$('#e-res-'+id).value, r = r0 && r0!==i.resultado ? r0 : '', fim = r ? lerDesfecho('e-'+id, r) : null;
     if(r && !fim) return;
     const ok = await api('atualizarItem',p);
     if(!ok) return;
