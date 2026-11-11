@@ -648,6 +648,7 @@ function agenda(itens, mostrarDono){
 
 /* ---------- MEU DASH ---------- */
 function viewMeuDash(){
+  if(state.geralModo==='mes') return viewMeuDashMes();
   const eu=me(), w=state.semana, c=calcPessoa(eu,w), pv=esteiraDe(eu)==='pv';
   const k = pv ? `
     <div class="kpi"><span class="k">Reuniões no plano</span><span class="v">${c.comp}</span><span class="d">meu compromisso</span></div>
@@ -658,9 +659,26 @@ function viewMeuDash(){
     <div class="kpi"><span class="k">Ganho no plano</span><span class="v">${brl(c.ganho)}</span><span class="d">assertividade ${c.ass}%</span></div>
     <div class="kpi"><span class="k">Fora do plano</span><span class="v">${brl(c.fora)}</span><span class="d">entra no realizado</span></div>
     <div class="kpi"><span class="k">Previsto na semana</span><span class="v">${brl(c.prevSem)}</span><span class="d">aberto com previsão nesta semana</span></div>`;
-  $('#view').innerHTML=`<div class="grid2">
+  $('#view').innerHTML=`${seletorGeral()}<div class="grid2">
     <div class="panel"><h2>Meus números · ${wk(w)}</h2><div class="kpis">${k}</div></div>
     <div class="panel"><h2>Minha semana, dia a dia</h2>${agenda(c.S,false)}</div></div>`;
+}
+// mesmos campos do Meu dash, somando o mês inteiro (cada negócio conta uma vez, como na Visão geral do gestor)
+function viewMeuDashMes(){
+  const eu=me(), pv=esteiraDe(eu)==='pv', m=calcMes(eu), sem=calcPessoa(eu,state.semana);
+  const k = pv ? `
+    <div class="kpi"><span class="k">Reuniões no plano</span><span class="v">${m.agend}</span><span class="d">leads no meu plano em ${MES.label}</span></div>
+    <div class="kpi"><span class="k">Realizadas</span><span class="v">${m.real}</span><span class="d">show rate ${m.show===null?'—':m.show+'%'} · ${m.ns} no-show${m.reag?` (${m.reag} reagendaram)`:''}</span></div>
+    <div class="kpi"><span class="k">Passadas a vendas</span><span class="v">${m.handoffs}</span><span class="d">reuniões entregues no mês</span></div>
+    <div class="kpi"><span class="k">Viraram venda</span><span class="v">${m.ganhosGerados}</span><span class="d">${m.emNeg} ainda em negociação</span></div>` : `
+    <div class="kpi"><span class="k">Compromisso</span><span class="v">${brl(m.proj)}</span><span class="d">projetado no mês · ponderado aberto ${brl(Math.round(m.pond))}</span></div>
+    <div class="kpi"><span class="k">Ganho no plano</span><span class="v">${brl(m.ganho)}</span><span class="d">assertividade ${m.proj?Math.round(m.ganho/m.proj*100):0}%</span></div>
+    <div class="kpi"><span class="k">Fora do plano</span><span class="v">${brl(m.fora)}</span><span class="d">entra no realizado</span></div>
+    <div class="kpi"><span class="k">Previsto no mês</span><span class="v">${brl(m.prevMes)}</span><span class="d">aberto com previsão até o fim do mês</span></div>`;
+  $('#view').innerHTML=`${seletorGeral()}<div class="grid2">
+    <div class="panel"><h2>Meus números · ${MES.label}</h2><div class="kpis">${k}</div>
+      <p class="hint">${pv?'Cada lead conta uma vez no mês, mesmo que tenha sido remarcado.':`Cada negócio conta uma vez no mês, mesmo que tenha rolado de semana. Funil ainda aberto: <b>${brl(m.ativo)}</b> · perdido: ${brl(m.perdido)}.`}</p></div>
+    <div class="panel"><h2>Minha semana, dia a dia</h2>${agenda(sem.S,false)}</div></div>`;
 }
 
 /* ---------- GESTOR: VISÃO GERAL ---------- */
@@ -1222,7 +1240,7 @@ function render(){
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
   $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes','todos'].includes(state.tab);
   cur[3]();
-  if(state.tab==='geral') ligarSeletorGeral();
+  if(state.tab==='geral' || state.tab==='meudash') ligarSeletorGeral();
   if(gestor) $('#view').insertAdjacentHTML('afterbegin', avisoLimiteBusca());
   ligarObs($('#view'));
 }
