@@ -291,8 +291,34 @@ function sugestoesDoMes(eu){
 }
 
 /* ---------- itens ---------- */
-const RES = {ganhou:['Ganhou','p-good'], perdeu:['Perdeu','p-bad'], rolou:['Rolou','p-warn'], realizada:['Reunião realizada','p-good'], noshow:['No-show','p-bad']};
-const statusPill = i => i.resultado ? `<span class="pill ${RES[i.resultado][1]}">${RES[i.resultado][0]}</span>` : '<span class="pill p-open">Aberto</span>';
+const RES = {ganhou:['Ganhou','p-good'], perdeu:['Perdeu','p-bad'], rolou:['Rolou','p-warn'], realizada:['Reunião realizada','p-good'], noshow:['No-show','p-bad'], reagendada:['No-show · reagendou','p-warn']};
+// mesmos motivos de perda cadastrados no Clint (cópia de lib/config.js)
+const MOTIVOS_PERDA = ['Comprou com outra empresa','Desqualificado','Não é o tomador de decisão','Sem dinheiro','Sem interesse','Sem limite no cartão','Sem perfil','Tentativas esgotadas','Timing'];
+// campos extras de cada desfecho: motivo da perda, nova data do no-show reagendado, vendedor da reunião realizada
+function extrasDesfecho(pre, minData){
+  const vend=TIME.filter(p=>p.esteira==='vd'&&p.ativo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+  return `<div class="extra-desf" data-se="perdeu" hidden>
+      <label class="f" for="${pre}-mot">Motivo da perda<select id="${pre}-mot"><option value="">Escolha o motivo…</option>${MOTIVOS_PERDA.map(m=>`<option>${esc(m)}</option>`).join('')}</select></label>
+      <label class="f wide" for="${pre}-det">Detalhe <span class="opc">(opcional)</span><input id="${pre}-det" maxlength="600" placeholder="Ex.: fechou com o concorrente por preço"></label></div>
+    <div class="extra-desf" data-se="reagendada" hidden>
+      <label class="f" for="${pre}-nova">Nova data da reunião<input id="${pre}-nova" type="date" min="${minData}"></label>
+      <p class="hint f wide">O no-show fica registrado e a reunião volta para o seu plano na nova data.</p></div>
+    <div class="extra-desf" data-se="realizada" hidden>
+      <label class="f" for="${pre}-dest">Passou para<select id="${pre}-dest"><option value="">Escolha o vendedor…</option>${vend}</select></label></div>`;
+}
+function mostrarExtra(scope, r){ scope.querySelectorAll('.extra-desf').forEach(x=>x.hidden = x.dataset.se!==r); }
+// lê os campos do desfecho escolhido; null se faltar algo obrigatório
+function lerDesfecho(pre, r){
+  const p={resultado:r};
+  if(r==='perdeu'){ p.motivo=$('#'+pre+'-mot').value; p.detalhe=$('#'+pre+'-det').value.trim();
+    if(!p.motivo){ toast('Escolha o motivo da perda'); $('#'+pre+'-mot').focus(); return null; } }
+  if(r==='reagendada'){ p.novaData=$('#'+pre+'-nova').value;
+    if(!p.novaData){ toast('Informe a nova data da reunião'); $('#'+pre+'-nova').focus(); return null; } }
+  if(r==='realizada'){ p.destinoId=Number($('#'+pre+'-dest').value)||null;
+    if(!p.destinoId){ toast('Escolha para qual vendedor a reunião foi passada'); $('#'+pre+'-dest').focus(); return null; } }
+  return p;
+}
+const statusPill = i => i.resultado ? `<span class="pill ${RES[i.resultado]?.[1]||'p-open'}">${RES[i.resultado]?.[0]||esc(i.resultado)}</span>${i.resultado==='perdeu'&&i.motivo_perda?`<span class="tag" title="${esc(i.motivo_detalhe||'')}">${esc(i.motivo_perda)}${i.motivo_detalhe?' · '+esc(i.motivo_detalhe):''}</span>`:''}` : '<span class="pill p-open">Aberto</span>';
 function origemPill(i){
   if(i.origem==='fora') return '<span class="pill p-warn">Fora do plano</span>';
   if(i.origem==='pv') return '<span class="pill p-pv">Veio da pré-vendas</span>';
@@ -341,6 +367,11 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
           <select id="e-prod-${i.id}">${prodOptions(i.produto)}</select></label>
         ${pv?'':`<label class="f" for="e-val-${i.id}">Valor (R$)<input id="e-val-${i.id}" type="number" min="0" step="500" value="${i.valor||''}"></label>`}
         ${obsCampo('e-obs-'+i.id, i.observacoes)}
+        <label class="f" for="e-res-${i.id}">Desfecho<select id="e-res-${i.id}" data-desf>
+          <option value="">Em aberto</option>${pv
+            ? '<option value="realizada">Reunião realizada</option><option value="reagendada">No-show · reagendou</option><option value="noshow">No-show · não reagendou</option>'
+            : '<option value="ganhou">Ganhou</option><option value="perdeu">Perdeu</option>'}</select></label>
+        ${extrasDesfecho('e-'+i.id, s.ini)}
         <div class="actions"><button class="btn primary" type="submit">Salvar</button></div>
       </form></td></tr>`;
   }).join('');
@@ -350,6 +381,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
     <tbody>${rows || `<tr><td colspan="${cols}" class="empty">Nenhum compromisso nesta semana ainda.</td></tr>`}</tbody></table></div>`;
 }
 function ligarTabela(root){
+  root.querySelectorAll('select[data-desf]').forEach(sel=>sel.addEventListener('change',()=>mostrarExtra(sel.closest('form'), sel.value)));
   root.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>{
     const id=Number(b.dataset.edit); state.editing = state.editing===id?null:id; render();
   }));
@@ -359,8 +391,13 @@ function ligarTabela(root){
       previsao:$('#e-prev-'+id).value, temp:$('#e-temp-'+id).value, produto:$('#e-prod-'+id).value,
       valor:$('#e-val-'+id)?Number($('#e-val-'+id).value||0):0, observacoes:$('#e-obs-'+id).value.trim()};
     if(!p.produto) return toast('Escolha o produto');
+    const r=$('#e-res-'+id).value, fim = r ? lerDesfecho('e-'+id, r) : null;
+    if(r && !fim) return;
     const ok = await api('atualizarItem',p);
-    if(ok){ state.editing=null; await carregar(); render(); toast(`${i.empresa} atualizado`); }
+    if(!ok) return;
+    const j = fim ? await api('fecharItem',{id, ...fim}) : null;
+    state.editing=null; await carregar(); render();
+    toast(fim ? (j ? (j.aviso || `${i.empresa}: ${RES[r][0]}`) : `${i.empresa} atualizado, mas o desfecho não foi salvo`) : `${i.empresa} atualizado`);
   }));
   root.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{ state.excluir=Number(b.dataset.del); render(); }));
   root.querySelectorAll('[data-delno]').forEach(b=>b.addEventListener('click',()=>{ state.excluir=null; render(); }));
@@ -460,18 +497,25 @@ function viewFechamento(){
     <td><div class="result">${pv?`
       <select aria-label="Vendedor de destino" class="dest" style="width:auto"><option value="">Passar para…</option>${vend}</select>
       <button class="btn sm" data-r="realizada">Realizada</button>
-      <button class="btn sm" data-r="noshow">No-show</button>
+      <button class="btn sm" data-r="reagendada">No-show · reagendou</button>
+      <button class="btn sm" data-r="noshow">No-show · não reagendou</button>
       <button class="btn sm" data-r="rolou">Remarcar p/ ${nw}</button>`:`
       <button class="btn sm" data-r="ganhou">Ganhou</button>
       <button class="btn sm" data-r="perdeu">Perdeu</button>
-      <button class="btn sm" data-r="rolou">Rolar p/ ${nw}</button>`}</div></td></tr>`).join('');
+      <button class="btn sm" data-r="rolou">Rolar p/ ${nw}</button>`}</div></td></tr>
+    <tr class="edit" data-extra="${i.id}" hidden><td colspan="3"><div class="form">${extrasDesfecho('f'+i.id, state.semana)}
+      <div class="actions"><button class="btn primary" type="button" data-conf="${i.id}">Confirmar</button><button class="btn ghost" type="button" data-canc="${i.id}">Cancelar</button></div></div></td></tr>`).join('');
   $('#view').innerHTML=`<div class="panel">
     <h2>Fechar a ${sem(state.semana).label}</h2>
-    <p class="hint">Só aparece o que ainda está aberto. ${pv?'Reunião realizada pede o vendedor: a negociação entra no plano dele na semana seguinte, para ele completar o próximo passo.':'Rolar leva o item para a próxima semana com o status atual. Você só precisa redefinir a ação.'}</p>
+    <p class="hint">Só aparece o que ainda está aberto. ${pv?'Reunião realizada pede o vendedor: a negociação entra no plano dele na semana seguinte. No-show que remarcou: escolha "reagendou" e informe a nova data, a reunião volta para o seu plano sem precisar lançar de novo.':'Rolar leva o item para a próxima semana com o status atual. Perdeu pede o motivo (os mesmos do Clint). Dá para fechar também pelo Editar, no Meu plano, sem esperar a sexta.'}</p>
     <div class="tbl"><table><thead><tr><th>Item</th><th>Ação planejada</th><th>Resultado</th></tr></thead>
     <tbody>${rows||`<tr><td colspan="3" class="empty">Tudo fechado na ${wk(state.semana)}.</td></tr>`}</tbody></table></div></div>`;
   $('#view').querySelectorAll('tr[data-id] button').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr'), i=ITENS.find(x=>x.id==tr.dataset.id), r=b.dataset.r;
+    if(r==='perdeu' || r==='reagendada'){
+      const ex=$('#view').querySelector(`tr[data-extra="${i.id}"]`); ex.hidden=false; ex.dataset.r=r; mostrarExtra(ex, r);
+      ex.querySelector(r==='perdeu'?'select':'input').focus(); return;
+    }
     const p={id:i.id, resultado:r};
     if(r==='realizada'){
       p.destinoId=Number(tr.querySelector('.dest').value)||null;
@@ -480,13 +524,19 @@ function viewFechamento(){
     b.disabled=true;
     await salvar('fecharItem',p, r==='rolou'?`${i.empresa} foi para a ${nw}`:`${i.empresa}: ${RES[r][0]}`);
   }));
+  $('#view').querySelectorAll('[data-canc]').forEach(b=>b.addEventListener('click',()=>{ b.closest('tr').hidden=true; }));
+  $('#view').querySelectorAll('[data-conf]').forEach(b=>b.addEventListener('click',async()=>{
+    const ex=b.closest('tr'), id=Number(b.dataset.conf), i=ITENS.find(x=>x.id===id), r=ex.dataset.r;
+    const p=lerDesfecho('f'+id, r); if(!p) return;
+    b.disabled=true; await salvar('fecharItem',{id, ...p}, `${i.empresa}: ${RES[r][0]}`); b.disabled=false;
+  }));
 }
 
 /* ---------- números ---------- */
 function calcPessoa(n,w){
   const S=ITENS.filter(i=>i.semana===w&&i.dono===n), plano=S.filter(i=>i.origem!=='fora');
   if(esteiraDe(n)==='pv'){
-    const real=S.filter(i=>i.resultado==='realizada'), ns=S.filter(i=>i.resultado==='noshow').length;
+    const real=S.filter(i=>i.resultado==='realizada'), ns=S.filter(i=>i.resultado==='noshow'||i.resultado==='reagendada').length;
     const filhos=ITENS.filter(x=>x.origem==='pv' && real.some(r=>r.id===x.de));
     return {S,comp:plano.length,real:real.length,ns,show:(real.length+ns)?Math.round(real.length/(real.length+ns)*100):null,
       handoffs:real.length,fora:S.filter(i=>i.origem==='fora').length,aberto:S.filter(i=>!i.resultado).length,
@@ -526,6 +576,15 @@ function viewMeuDash(){
 }
 
 /* ---------- GESTOR: VISÃO GERAL ---------- */
+// motivos de perda do mês da semana escolhida (vendas), com valor perdido
+function painelMotivos(){
+  const L=ITENS.filter(i=>i.resultado==='perdeu' && MES.semanas.includes(i.semana));
+  if(!L.length) return `<div class="panel"><h2>Motivos de perda · ${MES.label}</h2><p class="hint">Nenhum negócio perdido no plano neste mês.</p></div>`;
+  const g={}; L.forEach(i=>{ const k=i.motivo_perda||'Sem motivo informado'; (g[k]=g[k]||{n:0,v:0,l:[]}); g[k].n++; g[k].v+=i.valor||0; g[k].l.push(i); });
+  const linhas=Object.entries(g).sort((a,b)=>b[1].n-a[1].n).map(([k,x])=>`<tr><td><b>${esc(k)}</b><span class="tag">${x.l.map(i=>esc(i.empresa)+' ('+esc(i.dono.split(' ')[0])+')').join(', ')}</span></td><td class="num">${x.n}</td><td class="num">${brl(x.v)}</td></tr>`).join('');
+  return `<div class="panel"><h2>Motivos de perda · ${MES.label}</h2><p class="hint">Negócios marcados como perdidos no plano semanal do mês, com os mesmos motivos do Clint.</p>
+    <div class="tbl"><table><thead><tr><th>Motivo</th><th class="num">Negócios</th><th class="num">Valor perdido</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+}
 function viewGeral(){
   const w=state.semana, vds=TIME.filter(p=>p.esteira==='vd'), pvs=TIME.filter(p=>p.esteira==='pv');
   const V=vds.map(p=>calcPessoa(p.nome,w)), P=pvs.map(p=>calcPessoa(p.nome,w));
@@ -558,7 +617,7 @@ function viewGeral(){
     <div class="panel"><div class="esteira-h"><span class="dot" style="background:var(--pv)"></span><h2>Pré-vendas</h2></div><div class="kpis">
       <div class="kpi"><span class="k">Reuniões no plano</span><span class="v">${sum(P,'comp')}</span><span class="d">compromisso</span></div>
       <div class="kpi"><span class="k">Realizadas</span><span class="v">${real}</span><span class="d">show rate ${show===null?'—':show+'%'}</span></div>
-      <div class="kpi"><span class="k">No-show</span><span class="v">${ns}</span><span class="d">na semana</span></div>
+      <div class="kpi"><span class="k">No-show</span><span class="v">${ns}</span><span class="d">${doTime.filter(i=>i.resultado==='reagendada').length} reagendaram</span></div>
       <div class="kpi"><span class="k">Viraram venda</span><span class="v">${sum(P,'ganhosGerados')}</span><span class="d">${sum(P,'emNeg')} em negociação</span></div></div></div>
   </div>
   <div class="grid2">
@@ -567,6 +626,7 @@ function viewGeral(){
       ${semAcao.length?`<p class="hint">Itens abertos sem ação ou sem dia. Bom assunto para a daily.</p><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">${semAcao.map(i=>`<li><b>${esc(i.empresa)}</b> · ${esc(i.dono)}${i.origem==='pv'?' <span class="pill p-pv">veio da pré-vendas</span>':''}</li>`).join('')}</ul>`:'<p class="hint">Todo item aberto tem ação e dia definidos.</p>'}
     </div>
   </div>
+  ${painelMotivos()}
   <div class="panel"><h2>Por produto · ${wk(w)}</h2><div class="tbl"><table>
     <thead><tr><th>Produto</th><th class="num">Reuniões PV</th><th class="num">Negócios</th><th class="num">Compromisso</th><th class="num">Ganho</th></tr></thead>
     <tbody>${[...PRODUTOS,''].map(pr=>{

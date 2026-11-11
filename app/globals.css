@@ -205,3 +205,4 @@ tr.obs-row td{background:var(--sunk);padding-top:0}
 .obs-campo .opc{text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint)}
 textarea{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface);border:1px solid var(--ctl-line);border-radius:12px;padding:9px 12px;width:100%;resize:vertical;min-height:44px}
 .aviso-limite{display:flex;flex-direction:column;gap:6px;padding:14px 16px;margin-bottom:16px;border-radius:14px;background:var(--warn-soft);border:1px solid var(--warn, #E8B44C);font-size:13.5px}
+.extra-desf:not([hidden]){display:contents}
