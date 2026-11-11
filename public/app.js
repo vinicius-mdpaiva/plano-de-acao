@@ -735,11 +735,72 @@ function calcMes(n){
     pvNeg:G.filter(g=>g.itens.some(i=>i.origem==='pv')).length, G};
 }
 const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+/* ---------- resumo diário para o WhatsApp (só gestor, na Visão geral) ---------- */
+// *negrito* e _itálico_ no formato do WhatsApp
+function resumoWhatsApp(){
+  const w=state.semana, s=sem(w), fimSem=addDias(w,4);
+  const agora=new Date(), hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'});
+  const L=[];
+  L.push(`*Plano de ação · ${wk(w)} (${dm(w)} a ${dm(fimSem)})*`);
+  L.push(`_Posição de ${fd(HOJE)}, ${hora}_`);
+  // vendas: negócios ainda abertos no plano da semana (cada negócio uma vez)
+  const vds=TIME.filter(p=>p.esteira==='vd'&&p.ativo);
+  let total=0, qtd=0, prevTot=0, ganhoTot=0;
+  const blocos=vds.map(p=>{
+    const S=ITENS.filter(i=>i.dono===p.nome && i.semana===w && i.origem!=='fora');
+    const G=negociosDe(S).map(g=>g.ref);
+    const abertos=G.filter(i=>!i.resultado).sort((a,b)=>(b.valor||0)-(a.valor||0));
+    const soma=abertos.reduce((a,i)=>a+(i.valor||0),0);
+    const ganho=G.filter(i=>i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0)
+      + ITENS.filter(i=>i.dono===p.nome && i.semana===w && i.origem==='fora' && i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
+    const prevSemana=abertos.filter(i=>prev(i)>=w && prev(i)<=addDias(w,6)).reduce((a,i)=>a+(i.valor||0),0);
+    total+=soma; qtd+=abertos.length; prevTot+=prevSemana; ganhoTot+=ganho;
+    const linhas=abertos.map(i=>`• ${i.empresa} · ${brl(i.valor)} · ${i.temp}${prev(i)?` · fecha ${dm(prev(i))}`:''}`);
+    return [`*${p.nome}* · ${brl(soma)} em ${abertos.length} ${abertos.length===1?'negócio':'negócios'}${ganho?` · ganho na semana ${brl(ganho)}`:''}`,
+            ...(linhas.length?linhas:['• nada em aberto no plano da semana'])].join('\n');
+  });
+  L.push('', '*VENDAS · em aberto na semana*', '', blocos.join('\n\n'));
+  L.push('', `*Total em aberto: ${brl(total)}* (${qtd} ${qtd===1?'negócio':'negócios'})`);
+  L.push(`Previsão de fechar nesta semana: ${brl(prevTot)}`);
+  if(ganhoTot) L.push(`Ganho na semana até agora: ${brl(ganhoTot)}`);
+  // pré-vendas: reuniões ainda agendadas na semana
+  const pvs=TIME.filter(p=>p.esteira==='pv'&&p.ativo).map(p=>p.nome);
+  const R=ITENS.filter(i=>pvs.includes(i.dono) && i.semana===w);
+  const dataR=i=>i.previsao||i.quando||'';
+  const agendadas=R.filter(i=>!i.resultado && (!dataR(i) || dataR(i)>=HOJE)).sort((a,b)=>dataR(a).localeCompare(dataR(b)));
+  const atrasadas=R.filter(i=>!i.resultado && dataR(i) && dataR(i)<HOJE).length;
+  const real=R.filter(i=>i.resultado==='realizada').length, ns=R.filter(i=>i.resultado==='noshow'||i.resultado==='reagendada').length;
+  L.push('', '*PRÉ-VENDAS · reuniões ainda agendadas na semana*', '');
+  L.push(`*${agendadas.length} ${agendadas.length===1?'reunião':'reuniões'}* a partir de hoje`);
+  agendadas.forEach(i=>L.push(`• ${dataR(i)?fd(dataR(i)):'sem data'} · ${i.empresa}${pvs.length>1?` (${i.dono.split(' ')[0]})`:''}`));
+  L.push(`Na semana até agora: ${real} ${real===1?'realizada':'realizadas'} · ${ns} no-show${atrasadas?` · ${atrasadas} sem desfecho marcado`:''}`);
+  return L.join('\n');
+}
+function painelWhatsApp(){
+  if(!state.zap) return '';
+  const t=resumoWhatsApp();
+  return `<div class="panel zap"><div class="zap-h"><h2>Resumo para o WhatsApp · ${wk(state.semana)}</h2><button class="btn sm ghost" id="zapFechar" type="button">Fechar</button></div>
+    <p class="hint">Confira e, se quiser, ajuste o texto antes de copiar. Os asteriscos viram negrito no WhatsApp.</p>
+    <textarea id="zapTxt" rows="18" spellcheck="false">${esc(t)}</textarea>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" id="zapCopiar" type="button">Copiar texto</button>
+      <a class="btn" id="zapAbrir" href="#" target="_blank" rel="noopener">Abrir no WhatsApp</a></div></div>`;
+}
+function ligarWhatsApp(){
+  $('#zapBtn')?.addEventListener('click',()=>{ state.zap=!state.zap; render(); if(state.zap) $('#zapTxt')?.scrollIntoView({behavior:'smooth',block:'center'}); });
+  $('#zapFechar')?.addEventListener('click',()=>{ state.zap=false; render(); });
+  $('#zapCopiar')?.addEventListener('click',async()=>{
+    const t=$('#zapTxt').value;
+    try{ await navigator.clipboard.writeText(t); toast('Resumo copiado. É só colar no WhatsApp.'); }
+    catch{ $('#zapTxt').select(); document.execCommand('copy'); toast('Resumo copiado.'); }
+  });
+  $('#zapAbrir')?.addEventListener('click',e=>{ e.currentTarget.href='https://wa.me/?text='+encodeURIComponent($('#zapTxt').value); });
+}
 function seletorGeral(){
   const m=state.geralModo||'semana';
-  return `<div class="seg" role="tablist" aria-label="Período">
+  const zap = state.tab==='geral' && souGestor() ? `<button class="btn sm" id="zapBtn" type="button">${state.zap?'Fechar resumo':'Resumo para WhatsApp'}</button>` : '';
+  return `<div class="topo-geral"><div class="seg" role="tablist" aria-label="Período">
     <button role="tab" data-gm="semana" aria-selected="${m==='semana'}">Semana · ${wk(state.semana)}</button>
-    <button role="tab" data-gm="mes" aria-selected="${m==='mes'}">Mês · ${MES.label}</button></div>`;
+    <button role="tab" data-gm="mes" aria-selected="${m==='mes'}">Mês · ${MES.label}</button></div>${zap}</div>${state.tab==='geral'?painelWhatsApp():''}`;
 }
 function ligarSeletorGeral(){ $('#view').querySelectorAll('[data-gm]').forEach(b=>b.addEventListener('click',()=>{ state.geralModo=b.dataset.gm; render(); })); }
 function viewGeralMes(){
@@ -1241,6 +1302,7 @@ function render(){
   $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes','todos'].includes(state.tab);
   cur[3]();
   if(state.tab==='geral' || state.tab==='meudash') ligarSeletorGeral();
+  if(state.tab==='geral') ligarWhatsApp();
   if(gestor) $('#view').insertAdjacentHTML('afterbegin', avisoLimiteBusca());
   ligarObs($('#view'));
 }

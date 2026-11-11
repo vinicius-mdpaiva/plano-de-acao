@@ -207,10 +207,14 @@ textarea{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface)
 .aviso-limite{display:flex;flex-direction:column;gap:6px;padding:14px 16px;margin-bottom:16px;border-radius:14px;background:var(--warn-soft);border:1px solid var(--warn, #E8B44C);font-size:13.5px}
 .extra-desf:not([hidden]){display:contents}
 .aviso-dup{display:inline-block;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--warn-soft)}
-.seg{display:inline-flex;gap:4px;padding:4px;margin-bottom:16px;border:1px solid var(--line);border-radius:99px;background:var(--surface);max-width:100%;flex-wrap:wrap}
+.seg{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:99px;background:var(--surface);max-width:100%;flex-wrap:wrap}
 .seg button{font:inherit;font-size:13px;font-weight:600;color:var(--muted);background:transparent;border:0;border-radius:99px;padding:7px 16px;cursor:pointer}
 .seg button[aria-selected="true"]{background:var(--accent);color:var(--on-accent,#1a1a1a)}
 .funil-barra{display:flex;height:14px;border-radius:99px;overflow:hidden;margin-top:16px;gap:2px}
 .funil-legenda{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;font-size:12.5px;color:var(--muted)}
 .funil-legenda i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .funil-legenda b{color:var(--fg)}
+.topo-geral{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}
+.zap{border-color:#25D366}
+.zap-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.zap textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5;min-height:320px}
