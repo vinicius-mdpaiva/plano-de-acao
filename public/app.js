@@ -704,9 +704,11 @@ function negociosDe(itens){
   grupos.forEach(g=>{ g.ref=[...g.itens].reverse().find(i=>i.valor>0) || g.ult; });
   return grupos;
 }
+// último dia do mês calendário (a última semana do mês pode terminar no mês seguinte)
+const fimDoMes = () => { const [a,m]=MES.id.split('-').map(Number); return new Date(Date.UTC(a,m,0)).toISOString().slice(0,10); };
 function calcMes(n){
   const doMes=ITENS.filter(i=>i.dono===n && MES.semanas.includes(i.semana));
-  const fimMes=addDias(MES.semanas[MES.semanas.length-1],6), iniMes=MES.semanas[0];
+  const fimMes=fimDoMes(), iniMes=MES.id+'-01';
   if(esteiraDe(n)==='pv'){
     const G=negociosDe(doMes.filter(i=>i.origem!=='fora'));
     const realIds=doMes.filter(i=>i.resultado==='realizada').map(i=>i.id);
@@ -775,7 +777,7 @@ function resumoWhatsAppSemana(){
 }
 // MÊS: relatório completo (mesma regra da Visão geral do mês: cada negócio uma vez)
 function resumoWhatsAppMes(){
-  const L=[], fimMes=addDias(MES.semanas[MES.semanas.length-1],6);
+  const L=[], fimMes=fimDoMes();
   L.push(`*Plano de ação · ${MES.label}*`);
   L.push(`_Posição de ${fd(HOJE)}, ${horaAgora()}_`);
   const V=TIME.filter(p=>p.esteira==='vd'&&p.ativo).map(p=>({p,c:calcMes(p.nome)}));
