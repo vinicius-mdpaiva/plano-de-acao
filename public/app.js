@@ -331,7 +331,7 @@ function planoTabela(dono, editavel){
   const itens = ITENS.filter(i=>i.dono===dono && i.semana===state.semana).sort((a,b)=>(a.quando||'9').localeCompare(b.quando||'9'));
   return tabelaItens(itens, editavel, false, esteiraDe(dono)==='pv');
 }
-function tabelaItens(itens, editavel, mostrarDono, soPv){
+function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSemana=false){
   const cols = mostrarDono ? 6 : 5, s = sem(state.semana);
   const rows = itens.map(i=>{
     const pv = esteiraDe(i.dono)==='pv';
@@ -340,16 +340,19 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
       !i.acao ? `<div class="stack"><span class="pill p-warn">Sem ação definida</span>${i.quando?'':semDiaPill}</div>` :
       `<div class="stack"><span>${esc(i.acao)}</span>${i.quando?`<span class="tag">${fd(i.quando)}</span>`:semDiaPill}</div>`;
     const main = `<tr class="${!i.resultado&&!i.quando?'nodate':''}">
-      ${mostrarDono?`<td><span class="pill ${pv?'p-pv':'p-vd'}">${esc(i.dono)}</span></td>`:''}
+      ${mostrarDono?`<td><div class="stack"><span class="pill ${pv?'p-pv':'p-vd'}">${esc(i.dono)}</span>${mostrarSemana?`<span class="tag">${sem(i.semana).label}</span>`:''}</div></td>`:''}
       <td><div class="stack"><b>${esc(i.empresa)}</b>${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${obsChip('i'+i.id, i.observacoes)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
       <td class="when">${fd(prev(i))}</td>
       <td><div class="stack">${statusPill(i)}${editavel && !i.resultado ? (state.excluir===i.id
         ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
-        : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}</div></td>
+        : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}${gestor ? (state.gExcluir===i.id
+        ? `<div class="acoes-linha"><span class="tag">Excluir do plano de ${esc(i.dono.split(' ')[0])}?</span><button class="btn sm danger" data-gdelok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-gdelno>Cancelar</button></div>`
+        : `<div class="acoes-linha"><button class="btn sm" data-gedit="${i.id}">${state.gEdit===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-gdel="${i.id}" aria-label="Excluir ${esc(i.empresa)}">Excluir</button></div>`):''}</div></td>
     </tr>`;
     const linhaObs = obsRow('i'+i.id, i.observacoes, cols);
+    if(gestor) return main + linhaObs + (state.gEdit===i.id ? formGestor(i, cols) : '');
     if(state.editing!==i.id || !editavel) return main + linhaObs;
     return main + `<tr class="edit"><td colspan="${cols}">
       <form class="form" data-save="${i.id}">
@@ -379,6 +382,63 @@ function tabelaItens(itens, editavel, mostrarDono, soPv){
   return `<div class="tbl"><table>
     <thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>${mostrarDono?'Lead / negócio':soPv?'Lead':'Negócio'}</th><th>Em que pé está</th><th>Ação da semana · quando</th><th>${colData}</th><th>Status</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="${cols}" class="empty">Nenhum compromisso nesta semana ainda.</td></tr>`}</tbody></table></div>`;
+}
+/* ---------- gestor edita qualquer item ---------- */
+function formGestor(i, cols){
+  const pv=esteiraDe(i.dono)==='pv', id=i.id;
+  const semanas=[...new Set([...SEMANAS.map(x=>x.id), i.semana])].sort();
+  const des = pv ? [['realizada','Reunião realizada'],['noshow','No-show · não reagendou'],['reagendada','No-show · reagendou'],['rolou','Remarcada / rolou']]
+                 : [['ganhou','Ganhou'],['perdeu','Perdeu'],['rolou','Rolou']];
+  return `<tr class="edit"><td colspan="${cols}">
+    <form class="form" data-gsave="${id}">
+      <p class="hint f wide" style="grid-column:1/-1">Editando o plano de <b>${esc(i.dono)}</b>. O que você salvar aqui aparece no plano da pessoa. Mudar o dia para outra semana leva o item para aquela semana.</p>
+      <label class="f wide" for="g-emp-${id}">Empresa<input id="g-emp-${id}" value="${esc(i.empresa)}" maxlength="160"></label>
+      <label class="f" for="g-sem-${id}">Semana<select id="g-sem-${id}">${semanas.map(w=>`<option value="${w}" ${w===i.semana?'selected':''}>${sem(w).label}</option>`).join('')}</select></label>
+      <label class="f wide" for="g-status-${id}">Em que pé está<input id="g-status-${id}" value="${esc(i.status)}"></label>
+      <label class="f wide" for="g-acao-${id}">Ação da semana<input id="g-acao-${id}" value="${esc(i.acao)}"></label>
+      <label class="f" for="g-quando-${id}">Quando<input id="g-quando-${id}" type="date" value="${i.quando||''}"></label>
+      <label class="f" for="g-prev-${id}">${pv?'Data da reunião':'Previsão de fechamento'}<input id="g-prev-${id}" type="date" value="${i.previsao||''}"></label>
+      <label class="f" for="g-temp-${id}">Temperatura<select id="g-temp-${id}">${tempOptions(i.temp)}</select></label>
+      <label class="f" for="g-prod-${id}">Produto<select id="g-prod-${id}">${prodOptions(i.produto)}</select></label>
+      ${pv?'':`<label class="f" for="g-val-${id}">Valor (R$)<input id="g-val-${id}" type="number" min="0" step="500" value="${i.valor||''}"></label>`}
+      ${obsCampo('g-obs-'+id, i.observacoes)}
+      <label class="f" for="g-res-${id}">Desfecho<select id="g-res-${id}" data-gdesf>
+        <option value="">Em aberto</option>${des.map(([v,l])=>`<option value="${v}" ${v===i.resultado?'selected':''}>${l}</option>`).join('')}</select></label>
+      ${extrasDesfecho('g-'+id, '')}
+      <p class="hint f wide" style="grid-column:1/-1">O desfecho aqui só corrige o registro: não passa a reunião para vendas nem cria o reagendamento. Para isso, o dono usa o Fechamento.</p>
+      <div class="actions"><button class="btn primary" type="submit">Salvar alterações</button></div>
+    </form></td></tr>`;
+}
+function ligarGestor(root){
+  root.querySelectorAll('[data-gedit]').forEach(b=>b.addEventListener('click',()=>{ const id=Number(b.dataset.gedit); state.gEdit=state.gEdit===id?null:id; state.gExcluir=null; render(); }));
+  root.querySelectorAll('[data-gdel]').forEach(b=>b.addEventListener('click',()=>{ state.gExcluir=Number(b.dataset.gdel); state.gEdit=null; render(); }));
+  root.querySelectorAll('[data-gdelno]').forEach(b=>b.addEventListener('click',()=>{ state.gExcluir=null; render(); }));
+  root.querySelectorAll('[data-gdelok]').forEach(b=>b.addEventListener('click',async()=>{
+    b.disabled=true; const ok=await api('gestorExcluirItem',{id:Number(b.dataset.gdelok)}); state.gExcluir=null;
+    if(ok){ await carregar(); toast('Item excluído'); } render();
+  }));
+  root.querySelectorAll('form[data-gsave]').forEach(f=>{
+    const id=Number(f.dataset.gsave), i=ITENS.find(x=>x.id===id), sel=$('#g-res-'+id);
+    const mostra=()=>mostrarExtra(f, sel.value==='reagendada'?'':sel.value);
+    // preenche motivo e vendedor atuais
+    if(i.motivo_perda) $('#g-'+id+'-mot').value=i.motivo_perda;
+    $('#g-'+id+'-det').value=i.motivo_detalhe||'';
+    if(i.destino_id) $('#g-'+id+'-dest').value=String(i.destino_id);
+    mostra(); sel.addEventListener('change',mostra);
+    f.addEventListener('submit',async e=>{
+      e.preventDefault();
+      const g=k=>$('#g-'+k+'-'+id);
+      const p={id, empresa:g('emp').value.trim(), semana:g('sem').value, status:g('status').value.trim(), acao:g('acao').value.trim(),
+        quando:g('quando').value, previsao:g('prev').value, temp:g('temp').value, produto:g('prod').value,
+        valor:g('val')?Number(g('val').value||0):0, observacoes:$('#g-obs-'+id).value.trim(), resultado:sel.value};
+      if(!p.empresa) return toast('Informe a empresa');
+      if(!p.produto) return toast('Escolha o produto');
+      if(p.resultado==='perdeu'){ p.motivo=$('#g-'+id+'-mot').value; p.detalhe=$('#g-'+id+'-det').value.trim(); if(!p.motivo) return toast('Escolha o motivo da perda'); }
+      if(p.resultado==='realizada') p.destinoId=Number($('#g-'+id+'-dest').value)||null;
+      const ok=await api('gestorEditarItem',p);
+      if(ok){ state.gEdit=null; await carregar(); render(); toast(`${p.empresa} atualizado no plano de ${i.dono}`); }
+    });
+  });
 }
 function ligarTabela(root){
   root.querySelectorAll('select[data-desf]').forEach(sel=>sel.addEventListener('change',()=>mostrarExtra(sel.closest('form'), sel.value)));
@@ -640,6 +700,34 @@ function viewGeral(){
 }
 
 /* ---------- GESTOR: PLANOS DO TIME ---------- */
+function viewTodos(){
+  const f=state.todos||(state.todos={pessoa:'Todos', sit:'', mes:'', q:''});
+  const nomes=membros().map(p=>p.nome);
+  const meses=[...new Set(ITENS.map(i=>i.semana.slice(0,7)))].sort().reverse();
+  const SIT=[['','Todos os status'],['aberto','Abertos'],['fechado','Fechados'],...Object.entries(RES).map(([k,v])=>[k,v[0]])];
+  const q=semAcento(f.q);
+  let L=ITENS.filter(i=>(f.pessoa==='Todos'||i.dono===f.pessoa)
+    && (!f.mes || i.semana.slice(0,7)===f.mes)
+    && (!f.sit || (f.sit==='aberto'?!i.resultado : f.sit==='fechado'?!!i.resultado : i.resultado===f.sit))
+    && (!q || semAcento([i.empresa,i.status,i.acao,i.observacoes,i.produto,i.motivo_perda].join(' ')).includes(q)));
+  L.sort((a,b)=>b.semana.localeCompare(a.semana) || (a.quando||'9').localeCompare(b.quando||'9') || a.dono.localeCompare(b.dono));
+  const abertos=L.filter(i=>!i.resultado).length, ganhos=L.filter(i=>i.resultado==='ganhou');
+  const MAX=300, mostra=L.slice(0,MAX);
+  $('#view').innerHTML=`<div class="panel">
+    <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+      <label class="f" for="tP">Plano de<select id="tP">${['Todos',...nomes].map(n=>`<option ${n===f.pessoa?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+      <label class="f" for="tS">Status<select id="tS">${SIT.map(([v,l])=>`<option value="${v}" ${v===f.sit?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label class="f" for="tM">Mês<select id="tM"><option value="">Todos os meses</option>${meses.map(m=>`<option value="${m}" ${m===f.mes?'selected':''}>${MESES[Number(m.slice(5,7))-1]}/${m.slice(0,4)}</option>`).join('')}</select></label>
+      <label class="f" for="tQ">Buscar<input id="tQ" type="search" value="${esc(f.q)}" placeholder="Empresa, status, ação, motivo…"></label>
+    </div>
+    <p class="hint">${L.length} ${L.length===1?'item':'itens'} · ${abertos} em aberto · ${ganhos.length} ganhos (${brl(ganhos.reduce((a,i)=>a+i.valor,0))}). Tudo o que o time lançou, de qualquer semana, do mais recente para o mais antigo. Editar aqui altera o plano da pessoa.${L.length>MAX?` Mostrando os ${MAX} mais recentes: use os filtros para achar o resto.`:''}</p>
+    ${tabelaItens(mostra,false,true,false,true,true)}</div>`;
+  $('#tP').addEventListener('change',e=>{f.pessoa=e.target.value; render();});
+  $('#tS').addEventListener('change',e=>{f.sit=e.target.value; render();});
+  $('#tM').addEventListener('change',e=>{f.mes=e.target.value; render();});
+  $('#tQ').addEventListener('input',e=>{ f.q=e.target.value; const pos=e.target.selectionStart; render(); const n=$('#tQ'); n.focus(); n.setSelectionRange(pos,pos); });
+  ligarGestor($('#view'));
+}
 function viewTime(){
   const dias=diasDaSemana(state.semana);
   if(state.verDia && !dias.includes(state.verDia)) state.verDia='';
@@ -662,11 +750,12 @@ function viewTime(){
       <label class="f" for="verD">Dia<select id="verD">${opsDia}</select></label>
       <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button></div>
     </div>
-    <p class="hint">${modo} Somente leitura: quem atualiza é o dono do plano.</p>
-    ${tabelaItens(itens,false,todos,soPv)}</div>`;
+    <p class="hint">${modo} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
+    ${tabelaItens(itens,false,todos,soPv,true)}</div>`;
   $('#verP').addEventListener('change',e=>{state.verPessoa=e.target.value; render();});
   $('#verD').addEventListener('change',e=>{state.verDia=e.target.value; render();});
   $('#hoje').addEventListener('click',()=>{state.verPessoa='Todos'; state.semana=ATUAL; state.verDia=HOJE; montarMes(); render();});
+  ligarGestor($('#view'));
 }
 
 /* ---------- GESTOR: ACESSOS ---------- */
@@ -917,7 +1006,7 @@ const IC = {
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>`;
 const NAV_MEMBRO=()=>[['Plano',[['plano','Meu plano','list',viewPlano],...(temMensal(me())?[['mes','Plano mensal','cal',viewMes]]:[]),['fechamento','Fechamento de sexta','check',viewFechamento]]],
   ['Resultados',[['meudash','Meu dash','grid',viewMeuDash]]],['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
-const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTime],['mesgs','Planos mensais','cal',viewMesGestor]]],
+const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTime],['todos','Todos os planos','list',viewTodos],['mesgs','Planos mensais','cal',viewMesGestor]]],
   ['Resultados',[['geral','Visão geral','grid',viewGeral]]],
   ['Administração',[['clientes','Base de clientes','search',viewClientes],['acessos','Acessos','key',viewAcessos],['clint','Dados do Clint','db',viewClint]]],
   ['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
@@ -982,10 +1071,10 @@ function render(){
   const cur=flat.find(t=>t[0]===state.tab);
   $('#nav').innerHTML=nav.map(([g,its])=>`<div class="navgroup"><h3>${g}</h3>${its.map(([id,l,ic])=>
     `<button class="nav" data-tab="${id}" ${id===state.tab?'aria-current="page"':''}>${svg(ic)}<span class="lbl">${l}</span>${badge(id)}</button>`).join('')}</div>`).join('');
-  $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.excluir=null; state.editFoto=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
+  $('#nav').querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.tab; state.editing=null; state.gEdit=null; state.gExcluir=null; state.excluir=null; state.editFoto=null; state.confirmar=false; state.senhaGerada=null; render(); window.scrollTo(0,0);}));
   $('#pgEyebrow').textContent=cur[4]; $('#pgTitle').textContent=cur[1];
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
-  $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes'].includes(state.tab);
+  $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes','todos'].includes(state.tab);
   cur[3]();
   if(gestor) $('#view').insertAdjacentHTML('afterbegin', avisoLimiteBusca());
   ligarObs($('#view'));
