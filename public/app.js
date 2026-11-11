@@ -332,9 +332,10 @@ const mesmoNegocio = (a,b) => (a.deal_id && b.deal_id && a.deal_id===b.deal_id) 
 const completo = i => !!(i.acao && i.quando);
 // pares de itens ABERTOS do mesmo negócio no plano da mesma pessoa; "fica" é o mais completo (depois o mais recente)
 function duplicados(){
-  const abertos=ITENS.filter(i=>!i.resultado), pares=[], usados=new Set();
+  const abertos=ITENS.filter(i=>!i.resultado || ['ganhou','perdeu'].includes(i.resultado)), pares=[], usados=new Set();
   abertos.forEach(a=>abertos.forEach(b=>{
     if(a.id>=b.id || a.dono!==b.dono || usados.has(a.id) || usados.has(b.id) || !mesmoNegocio(a,b)) return;
+    if((a.resultado||b.resultado) && !(a.semana===b.semana && a.resultado===b.resultado)) return; // fechados: só o repetido na mesma semana
     const [fica,sai] = (completo(a)!==completo(b)) ? (completo(a)?[a,b]:[b,a]) : (a.semana>=b.semana?[a,b]:[b,a]);
     usados.add(a.id); usados.add(b.id); pares.push({fica,sai});
   }));
@@ -619,8 +620,10 @@ function calcPessoa(n,w){
       handoffs:real.length,fora:S.filter(i=>i.origem==='fora').length,aberto:S.filter(i=>!i.resultado).length,
       ganhosGerados:filhos.filter(x=>x.resultado==='ganhou').length,emNeg:filhos.filter(x=>!x.resultado).length};
   }
-  const comp=plano.reduce((a,i)=>a+i.valor,0), pond=plano.filter(i=>!i.resultado).reduce((a,i)=>a+i.valor*(PROB[i.temp]||.6),0);
-  const ganho=plano.filter(i=>i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
+  // o mesmo negócio lançado duas vezes na semana conta uma vez (vale o lançamento mais recente com valor)
+  const NG=negociosDe(plano).map(g=>g.ref);
+  const comp=NG.reduce((a,i)=>a+i.valor,0), pond=NG.filter(i=>!i.resultado).reduce((a,i)=>a+i.valor*(PROB[i.temp]||.6),0);
+  const ganho=NG.filter(i=>i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
   const fora=S.filter(i=>i.origem==='fora'&&i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0);
   // Previsto na semana: só o que está ABERTO (sem ganho, perdido ou rolado) com previsão de fechamento nesta semana.
   // Inclui item aberto esquecido em semana anterior; o mesmo negócio conta uma vez só (vale o lançamento mais recente).
@@ -676,6 +679,9 @@ function negociosDe(itens){
     const g=grupos.find(x=>x.dono===i.dono && mesmoNegocio(x.ult,i));
     if(g){ g.itens.push(i); g.ult=i; } else grupos.push({dono:i.dono, itens:[i], ult:i});
   });
+  // ref: o lançamento mais recente com valor. A reunião passada pela pré-vendas entra com R$ 0 e, se ficou
+  // esquecida aberta, não pode apagar o valor nem o desfecho do que o vendedor lançou (caso Noah fresh cream).
+  grupos.forEach(g=>{ g.ref=[...g.itens].reverse().find(i=>i.valor>0) || g.ult; });
   return grupos;
 }
 function calcMes(n){
@@ -696,15 +702,15 @@ function calcMes(n){
       fora:doMes.filter(i=>i.origem==='fora').length};
   }
   const G=negociosDe(doMes.filter(i=>i.origem!=='fora'));
-  const soma=f=>G.filter(f).reduce((a,g)=>a+(g.ult.valor||0),0);
-  const ativos=G.filter(g=>!g.ult.resultado);
+  const soma=f=>G.filter(f).reduce((a,g)=>a+(g.ref.valor||0),0);
+  const ativos=G.filter(g=>!g.ref.resultado);
   return {pv:false, n:G.length,
-    proj:soma(()=>true), ganho:soma(g=>g.ult.resultado==='ganhou'), perdido:soma(g=>g.ult.resultado==='perdeu'),
-    ativo:soma(g=>!g.ult.resultado), prox:soma(g=>g.ult.resultado==='rolou'),
-    nGanho:G.filter(g=>g.ult.resultado==='ganhou').length, nPerdido:G.filter(g=>g.ult.resultado==='perdeu').length,
-    nAtivo:ativos.length, nProx:G.filter(g=>g.ult.resultado==='rolou').length,
-    pond:ativos.reduce((a,g)=>a+g.ult.valor*(PROB[g.ult.temp]||.6),0),
-    prevMes:ativos.filter(g=>prev(g.ult)>=iniMes && prev(g.ult)<=fimMes).reduce((a,g)=>a+g.ult.valor,0),
+    proj:soma(()=>true), ganho:soma(g=>g.ref.resultado==='ganhou'), perdido:soma(g=>g.ref.resultado==='perdeu'),
+    ativo:soma(g=>!g.ref.resultado), prox:soma(g=>g.ref.resultado==='rolou'),
+    nGanho:G.filter(g=>g.ref.resultado==='ganhou').length, nPerdido:G.filter(g=>g.ref.resultado==='perdeu').length,
+    nAtivo:ativos.length, nProx:G.filter(g=>g.ref.resultado==='rolou').length,
+    pond:ativos.reduce((a,g)=>a+g.ref.valor*(PROB[g.ref.temp]||.6),0),
+    prevMes:ativos.filter(g=>prev(g.ref)>=iniMes && prev(g.ref)<=fimMes).reduce((a,g)=>a+g.ref.valor,0),
     fora:doMes.filter(i=>i.origem==='fora'&&i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0),
     pvNeg:G.filter(g=>g.itens.some(i=>i.origem==='pv')).length, G};
 }
@@ -763,9 +769,9 @@ function viewGeralMes(){
   </div>
   <div class="panel"><h2>Por produto · ${MES.label}</h2><div class="tbl"><table>
     <thead><tr><th>Produto</th><th class="num">Negócios</th><th class="num">Projetado</th><th class="num">Ganho</th><th class="num">Perdido</th><th class="num">Funil ativo</th></tr></thead>
-    <tbody>${[...PRODUTOS,''].map(pr=>{ const L=G.filter(g=>(g.ult.produto||'')===pr); if(!L.length) return '';
-      const s=f=>brl(L.filter(f).reduce((a,g)=>a+g.ult.valor,0));
-      return `<tr><td>${pr?`<span class="pill p-prod">${esc(pr)}</span>`:'<span class="tag">Sem produto</span>'}</td><td class="num">${L.length}</td><td class="num">${s(()=>true)}</td><td class="num">${s(g=>g.ult.resultado==='ganhou')}</td><td class="num">${s(g=>g.ult.resultado==='perdeu')}</td><td class="num">${s(g=>!g.ult.resultado)}</td></tr>`;
+    <tbody>${[...PRODUTOS,''].map(pr=>{ const L=G.filter(g=>(g.ref.produto||'')===pr); if(!L.length) return '';
+      const s=f=>brl(L.filter(f).reduce((a,g)=>a+g.ref.valor,0));
+      return `<tr><td>${pr?`<span class="pill p-prod">${esc(pr)}</span>`:'<span class="tag">Sem produto</span>'}</td><td class="num">${L.length}</td><td class="num">${s(()=>true)}</td><td class="num">${s(g=>g.ref.resultado==='ganhou')}</td><td class="num">${s(g=>g.ref.resultado==='perdeu')}</td><td class="num">${s(g=>!g.ref.resultado)}</td></tr>`;
     }).join('') || '<tr><td colspan="6" class="empty">Nada no plano deste mês ainda.</td></tr>'}</tbody></table></div></div>`;
 }
 function viewGeral(){
@@ -848,7 +854,7 @@ function viewTodos(){
     ${tabelaItens(mostra,false,true,false,true,true)}</div>`;
   const dups=duplicados();
   if(dups.length) $('#view').insertAdjacentHTML('afterbegin', `<div class="panel aviso-limite">
-    <b>${dups.length} ${dups.length===1?'negócio aparece':'negócios aparecem'} duas vezes em aberto no plano da mesma pessoa</b>
+    <b>${dups.length} ${dups.length===1?'negócio aparece':'negócios aparecem'} duas vezes no plano da mesma pessoa</b>
     <span>Normalmente é a reunião passada pela pré-vendas mais o mesmo negócio lançado à mão pelo vendedor. Juntar mantém o item mais completo, com o vínculo da pré-vendas e as observações dos dois, e apaga o outro.</span>
     <div class="tbl"><table><thead><tr><th>Pessoa</th><th>Fica</th><th>Sai</th><th></th></tr></thead><tbody>${dups.map(d=>`<tr>
       <td>${esc(d.fica.dono)}</td>
