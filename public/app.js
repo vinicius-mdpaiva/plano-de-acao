@@ -326,6 +326,20 @@ function origemPill(i){
   return '<span class="pill p-vd">Plano</span>';
 }
 const semPasso = i => !i.resultado && (!i.acao || !i.quando);
+// mesmo negócio: mesmo deal do Clint ou mesmo nome de empresa (igual ao servidor)
+const nomeNeg = t => semAcento(String(t||'').trim());
+const mesmoNegocio = (a,b) => (a.deal_id && b.deal_id && a.deal_id===b.deal_id) || nomeNeg(a.empresa)===nomeNeg(b.empresa);
+const completo = i => !!(i.acao && i.quando);
+// pares de itens ABERTOS do mesmo negócio no plano da mesma pessoa; "fica" é o mais completo (depois o mais recente)
+function duplicados(){
+  const abertos=ITENS.filter(i=>!i.resultado), pares=[], usados=new Set();
+  abertos.forEach(a=>abertos.forEach(b=>{
+    if(a.id>=b.id || a.dono!==b.dono || usados.has(a.id) || usados.has(b.id) || !mesmoNegocio(a,b)) return;
+    const [fica,sai] = (completo(a)!==completo(b)) ? (completo(a)?[a,b]:[b,a]) : (a.semana>=b.semana?[a,b]:[b,a]);
+    usados.add(a.id); usados.add(b.id); pares.push({fica,sai});
+  }));
+  return pares;
+}
 
 function planoTabela(dono, editavel){
   const itens = ITENS.filter(i=>i.dono===dono && i.semana===state.semana).sort((a,b)=>(a.quando||'9').localeCompare(b.quando||'9'));
@@ -518,6 +532,9 @@ function viewPlano(){
   $('#emp').addEventListener('input',()=>{
     const n=CLINT.porRotulo[$('#emp').value.trim()];
     $('#clintInfo').innerHTML = n ? infoClint(n,pv) : 'Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.';
+    const alvo = n ? {deal_id:n.deal_id, empresa:n.empresa||n.contato_nome} : {deal_id:null, empresa:$('#emp').value};
+    const ja = alvo.empresa && ITENS.find(i=>i.dono===me() && i.semana===state.semana && !i.resultado && mesmoNegocio(i,alvo));
+    if(ja) $('#clintInfo').innerHTML += `<br><span class="aviso-dup"><b>${esc(ja.empresa)} já está no seu plano desta semana${ja.origem==='pv'?' (veio da pré-vendas)':''}.</b> Ao adicionar, completamos esse item em vez de criar outro.</span>`;
     if(n){ if($('#val') && !$('#val').value && n.valor) $('#val').value=n.valor; if(pv && n.data_reuniao && !$('#pv').value) $('#pv').value=n.data_reuniao; }
   });
   const add = async orig => {
@@ -728,6 +745,19 @@ function viewTodos(){
     </div>
     <p class="hint">${L.length} ${L.length===1?'item':'itens'} · ${abertos} em aberto · ${ganhos.length} ganhos (${brl(ganhos.reduce((a,i)=>a+i.valor,0))}). Tudo o que o time lançou, de qualquer semana, do mais recente para o mais antigo. Editar aqui altera o plano da pessoa.${L.length>MAX?` Mostrando os ${MAX} mais recentes: use os filtros para achar o resto.`:''}</p>
     ${tabelaItens(mostra,false,true,false,true,true)}</div>`;
+  const dups=duplicados();
+  if(dups.length) $('#view').insertAdjacentHTML('afterbegin', `<div class="panel aviso-limite">
+    <b>${dups.length} ${dups.length===1?'negócio aparece':'negócios aparecem'} duas vezes em aberto no plano da mesma pessoa</b>
+    <span>Normalmente é a reunião passada pela pré-vendas mais o mesmo negócio lançado à mão pelo vendedor. Juntar mantém o item mais completo, com o vínculo da pré-vendas e as observações dos dois, e apaga o outro.</span>
+    <div class="tbl"><table><thead><tr><th>Pessoa</th><th>Fica</th><th>Sai</th><th></th></tr></thead><tbody>${dups.map(d=>`<tr>
+      <td>${esc(d.fica.dono)}</td>
+      <td><b>${esc(d.fica.empresa)}</b><span class="tag">${wk(d.fica.semana)} · ${d.fica.acao?esc(d.fica.acao)+' · '+fd(d.fica.quando):'sem próximo passo'}</span></td>
+      <td><b>${esc(d.sai.empresa)}</b><span class="tag">${wk(d.sai.semana)} · ${d.sai.origem==='pv'?'veio da pré-vendas · ':''}${d.sai.acao?esc(d.sai.acao):'sem próximo passo'}</span></td>
+      <td><button class="btn sm primary" data-juntar="${d.fica.id}:${d.sai.id}">Juntar</button></td></tr>`).join('')}</tbody></table></div></div>`);
+  $('#view').querySelectorAll('[data-juntar]').forEach(b=>b.addEventListener('click',async()=>{
+    const [manterId,removerId]=b.dataset.juntar.split(':').map(Number); b.disabled=true;
+    await salvar('gestorJuntarItens',{manterId,removerId});
+  }));
   $('#tP').addEventListener('change',e=>{f.pessoa=e.target.value; render();});
   $('#tS').addEventListener('change',e=>{f.sit=e.target.value; render();});
   $('#tM').addEventListener('change',e=>{f.mes=e.target.value; render();});
@@ -1022,6 +1052,7 @@ function badge(id){
   if(id==='fechamento'){ const n=ITENS.filter(i=>i.dono===eu&&i.semana===w&&!i.resultado).length; return n?`<span class="badge">${n}</span>`:''; }
   if(id==='mes'){ return !FOTOS[eu]?.congelado?'<span class="badge">!</span>':''; }
   if(id==='time'){ const n=ITENS.filter(i=>i.semana===w&&semPasso(i)).length; return n?`<span class="badge red">${n}</span>`:''; }
+  if(id==='todos'){ const n=duplicados().length; return n?`<span class="badge red" title="Negócios duplicados">${n}</span>`:''; }
   if(id==='mesgs'){ const n=vendedores().filter(p=>!FOTOS[p.nome]?.congelado).length; return n?`<span class="badge">${n}</span>`:''; }
   if(id==='acessos'){ const n=(D.acessos||[]).filter(a=>a.ativo&&!a.tem_senha).length; return n?`<span class="badge">${n}</span>`:''; }
   return '';
