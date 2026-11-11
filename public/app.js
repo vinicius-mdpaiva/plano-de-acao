@@ -668,7 +668,108 @@ function painelMotivos(){
   return `<div class="panel"><h2>Motivos de perda · ${MES.label}</h2><p class="hint">Negócios marcados como perdidos no plano semanal do mês, com os mesmos motivos do Clint.</p>
     <div class="tbl"><table><thead><tr><th>Motivo</th><th class="num">Negócios</th><th class="num">Valor perdido</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
 }
+/* ---------- visão do mês: cada negócio conta uma vez, pelo estado mais recente ---------- */
+// agrupa itens do mesmo negócio da mesma pessoa (rolar e reagendar criam cópias semana a semana)
+function negociosDe(itens){
+  const grupos=[];
+  [...itens].sort((a,b)=>a.semana.localeCompare(b.semana)||a.id-b.id).forEach(i=>{
+    const g=grupos.find(x=>x.dono===i.dono && mesmoNegocio(x.ult,i));
+    if(g){ g.itens.push(i); g.ult=i; } else grupos.push({dono:i.dono, itens:[i], ult:i});
+  });
+  return grupos;
+}
+function calcMes(n){
+  const doMes=ITENS.filter(i=>i.dono===n && MES.semanas.includes(i.semana));
+  const fimMes=addDias(MES.semanas[MES.semanas.length-1],6), iniMes=MES.semanas[0];
+  if(esteiraDe(n)==='pv'){
+    const G=negociosDe(doMes.filter(i=>i.origem!=='fora'));
+    const realIds=doMes.filter(i=>i.resultado==='realizada').map(i=>i.id);
+    const filhos=ITENS.filter(x=>x.origem==='pv' && realIds.includes(x.de));
+    const real=G.filter(g=>g.itens.some(i=>i.resultado==='realizada')).length;
+    const nsEv=doMes.filter(i=>i.resultado==='noshow'||i.resultado==='reagendada').length;
+    return {pv:true, agend:G.length, real, ns:nsEv, reag:doMes.filter(i=>i.resultado==='reagendada').length,
+      show:(real+nsEv)?Math.round(real/(real+nsEv)*100):null,
+      perdidas:G.filter(g=>g.ult.resultado==='noshow').length,
+      aberto:G.filter(g=>!g.ult.resultado).length,
+      prox:G.filter(g=>g.ult.resultado==='rolou'||g.ult.resultado==='reagendada').length,
+      handoffs:real, ganhosGerados:filhos.filter(x=>x.resultado==='ganhou').length, emNeg:filhos.filter(x=>!x.resultado).length,
+      fora:doMes.filter(i=>i.origem==='fora').length};
+  }
+  const G=negociosDe(doMes.filter(i=>i.origem!=='fora'));
+  const soma=f=>G.filter(f).reduce((a,g)=>a+(g.ult.valor||0),0);
+  const ativos=G.filter(g=>!g.ult.resultado);
+  return {pv:false, n:G.length,
+    proj:soma(()=>true), ganho:soma(g=>g.ult.resultado==='ganhou'), perdido:soma(g=>g.ult.resultado==='perdeu'),
+    ativo:soma(g=>!g.ult.resultado), prox:soma(g=>g.ult.resultado==='rolou'),
+    nGanho:G.filter(g=>g.ult.resultado==='ganhou').length, nPerdido:G.filter(g=>g.ult.resultado==='perdeu').length,
+    nAtivo:ativos.length, nProx:G.filter(g=>g.ult.resultado==='rolou').length,
+    pond:ativos.reduce((a,g)=>a+g.ult.valor*(PROB[g.ult.temp]||.6),0),
+    prevMes:ativos.filter(g=>prev(g.ult)>=iniMes && prev(g.ult)<=fimMes).reduce((a,g)=>a+g.ult.valor,0),
+    fora:doMes.filter(i=>i.origem==='fora'&&i.resultado==='ganhou').reduce((a,i)=>a+i.valor,0),
+    pvNeg:G.filter(g=>g.itens.some(i=>i.origem==='pv')).length, G};
+}
+const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+function seletorGeral(){
+  const m=state.geralModo||'semana';
+  return `<div class="seg" role="tablist" aria-label="Período">
+    <button role="tab" data-gm="semana" aria-selected="${m==='semana'}">Semana · ${wk(state.semana)}</button>
+    <button role="tab" data-gm="mes" aria-selected="${m==='mes'}">Mês · ${MES.label}</button></div>`;
+}
+function ligarSeletorGeral(){ $('#view').querySelectorAll('[data-gm]').forEach(b=>b.addEventListener('click',()=>{ state.geralModo=b.dataset.gm; render(); })); }
+function viewGeralMes(){
+  const vds=TIME.filter(p=>p.esteira==='vd'), pvs=TIME.filter(p=>p.esteira==='pv');
+  const V=vds.map(p=>({p,c:calcMes(p.nome)})), P=pvs.map(p=>({p,c:calcMes(p.nome)}));
+  const sv=k=>V.reduce((a,x)=>a+(x.c[k]||0),0), sp=k=>P.reduce((a,x)=>a+(x.c[k]||0),0);
+  const proj=sv('proj'), ganho=sv('ganho'), perdido=sv('perdido'), ativo=sv('ativo'), prox=sv('prox');
+  const real=sp('real'), ns=sp('ns'), show=(real+ns)?Math.round(real/(real+ns)*100):null;
+  const barra=[['ganho',ganho,'Ganho','var(--good, #4CC38A)'],['perdido',perdido,'Perdido','var(--bad, #E5675C)'],['ativo',ativo,'Funil ativo','#5B9BEA'],['prox',prox,'Rolou p/ o mês seguinte','var(--warn, #E8B44C)']];
+  const G=V.flatMap(x=>x.c.G);
+  $('#view').innerHTML=`${seletorGeral()}
+  <div class="panel">
+    <h2>Esteira conectada · ${MES.label}</h2>
+    <div class="flow">
+      <div class="step pv"><span class="k">Reuniões agendadas</span><span class="v">${sp('agend')}</span><span class="c">leads no plano do mês</span></div>
+      <div class="step pv"><span class="k">Realizadas</span><span class="v">${real}</span><span class="c">show rate ${show===null?'—':show+'%'}</span></div>
+      <div class="step pv"><span class="k">Passadas a vendas</span><span class="v">${sp('handoffs')}</span><span class="c">reuniões entregues ao vendedor</span></div>
+      <div class="step vd"><span class="k">Negociações da PV</span><span class="v">${sv('pvNeg')}</span><span class="c">no plano dos vendedores</span></div>
+      <div class="step vd"><span class="k">Ganhos da PV</span><span class="v">${sp('ganhosGerados')}</span><span class="c">originados na pré-vendas</span></div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><div class="esteira-h"><span class="dot" style="background:var(--vd)"></span><h2>Vendas · ${MES.label}</h2></div>
+      <div class="kpis">
+        <div class="kpi"><span class="k">Projetado no mês</span><span class="v">${brl(proj)}</span><span class="d">${sv('n')} ${sv('n')===1?'negócio lançado':'negócios lançados'} no plano</span></div>
+        <div class="kpi"><span class="k">Funil ativo</span><span class="v">${brl(ativo)}</span><span class="d">${sv('nAtivo')} abertos · ponderado ${brl(Math.round(sv('pond')))}</span></div>
+        <div class="kpi"><span class="k">Ganho no plano</span><span class="v">${brl(ganho)}</span><span class="d">${pct(ganho,proj)} do projetado${sv('fora')?` · + ${brl(sv('fora'))} fora do plano`:''}</span></div>
+        <div class="kpi"><span class="k">Perdido</span><span class="v">${brl(perdido)}</span><span class="d">${sv('nPerdido')} ${sv('nPerdido')===1?'negócio':'negócios'} · ${pct(perdido,proj)} do projetado</span></div></div>
+      <div class="funil-barra" aria-label="Para onde foi o projetado do mês">${barra.filter(b=>b[1]>0).map(b=>`<span style="flex:${b[1]};background:${b[3]}" title="${b[2]}: ${brl(b[1])}"></span>`).join('')||'<span style="flex:1;background:var(--line)"></span>'}</div>
+      <div class="funil-legenda">${barra.map(b=>`<span><i style="background:${b[3]}"></i>${b[2]} <b>${brl(b[1])}</b> · ${pct(b[1],proj)}</span>`).join('')}</div>
+      <p class="hint">Fotografia: tudo o que o time colocou no plano em ${MES.label}. Cada negócio conta uma vez, pelo estado mais recente (rolar de semana não duplica). Funil ativo é o que ainda está aberto: sobe quando entra negócio novo, desce quando ganha, perde ou rola para o mês seguinte. Com previsão de fechamento até o fim do mês: <b>${brl(sv('prevMes'))}</b>.</p></div>
+    <div class="panel"><div class="esteira-h"><span class="dot" style="background:var(--pv)"></span><h2>Pré-vendas · ${MES.label}</h2></div><div class="kpis">
+      <div class="kpi"><span class="k">Reuniões agendadas</span><span class="v">${sp('agend')}</span><span class="d">${sp('aberto')} ainda em aberto</span></div>
+      <div class="kpi"><span class="k">Realizadas</span><span class="v">${real}</span><span class="d">show rate ${show===null?'—':show+'%'}</span></div>
+      <div class="kpi"><span class="k">No-show</span><span class="v">${ns}</span><span class="d">${sp('reag')} reagendaram · ${sp('perdidas')} não voltaram</span></div>
+      <div class="kpi"><span class="k">Viraram venda</span><span class="v">${sp('ganhosGerados')}</span><span class="d">${sp('emNeg')} em negociação</span></div></div>
+      <p class="hint">Cada lead conta uma vez no mês, mesmo que tenha sido remarcado. No-show conta cada vez que o cliente faltou.${sp('prox')?` ${sp('prox')} ${sp('prox')===1?'reunião foi remarcada':'reuniões foram remarcadas'} para o mês seguinte.`:''}</p></div>
+  </div>
+  ${painelMotivos()}
+  <div class="grid2">
+    <div class="panel"><h2>Vendas por pessoa · ${MES.label}</h2><div class="tbl"><table>
+      <thead><tr><th>Pessoa</th><th class="num">Projetado</th><th class="num">Ganho</th><th class="num">Perdido</th><th class="num">Funil ativo</th><th class="num">Mês seguinte</th></tr></thead>
+      <tbody>${V.map(({p,c})=>`<tr><td>${esc(p.nome)}</td><td class="num">${brl(c.proj)}</td><td class="num">${brl(c.ganho)}${c.fora?`<span class="tag">+ ${brl(c.fora)} fora</span>`:''}</td><td class="num">${brl(c.perdido)}</td><td class="num">${brl(c.ativo)}</td><td class="num">${brl(c.prox)}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="panel"><h2>Pré-vendas por pessoa · ${MES.label}</h2><div class="tbl"><table>
+      <thead><tr><th>Pessoa</th><th class="num">Agendadas</th><th class="num">Realizadas</th><th class="num">No-show</th><th class="num">Viraram venda</th><th class="num">Em aberto</th></tr></thead>
+      <tbody>${P.map(({p,c})=>`<tr><td>${esc(p.nome)}</td><td class="num">${c.agend}</td><td class="num">${c.real}</td><td class="num">${c.ns}</td><td class="num">${c.ganhosGerados}</td><td class="num">${c.aberto}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>
+  <div class="panel"><h2>Por produto · ${MES.label}</h2><div class="tbl"><table>
+    <thead><tr><th>Produto</th><th class="num">Negócios</th><th class="num">Projetado</th><th class="num">Ganho</th><th class="num">Perdido</th><th class="num">Funil ativo</th></tr></thead>
+    <tbody>${[...PRODUTOS,''].map(pr=>{ const L=G.filter(g=>(g.ult.produto||'')===pr); if(!L.length) return '';
+      const s=f=>brl(L.filter(f).reduce((a,g)=>a+g.ult.valor,0));
+      return `<tr><td>${pr?`<span class="pill p-prod">${esc(pr)}</span>`:'<span class="tag">Sem produto</span>'}</td><td class="num">${L.length}</td><td class="num">${s(()=>true)}</td><td class="num">${s(g=>g.ult.resultado==='ganhou')}</td><td class="num">${s(g=>g.ult.resultado==='perdeu')}</td><td class="num">${s(g=>!g.ult.resultado)}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">Nada no plano deste mês ainda.</td></tr>'}</tbody></table></div></div>`;
+}
 function viewGeral(){
+  if(state.geralModo==='mes') return viewGeralMes();
   const w=state.semana, vds=TIME.filter(p=>p.esteira==='vd'), pvs=TIME.filter(p=>p.esteira==='pv');
   const V=vds.map(p=>calcPessoa(p.nome,w)), P=pvs.map(p=>calcPessoa(p.nome,w));
   const sum=(a,k)=>a.reduce((x,y)=>x+(y[k]||0),0);
@@ -680,7 +781,7 @@ function viewGeral(){
     return p.esteira==='pv'
       ? `<tr><td><span class="pill p-pv">Pré-vendas</span> ${esc(p.nome)}</td><td class="num">${c.comp} reuniões</td><td class="num">${c.real} realizadas</td><td class="num">${c.fora}</td><td class="num">${c.aberto}</td><td class="num">${c.S.filter(semPasso).length}</td></tr>`
       : `<tr><td><span class="pill p-vd">Vendas</span> ${esc(p.nome)}</td><td class="num">${brl(c.comp)}</td><td class="num">${brl(c.ganho+c.fora)}</td><td class="num">${c.S.filter(i=>i.origem==='fora').length}</td><td class="num">${c.aberto}</td><td class="num">${c.S.filter(semPasso).length}</td></tr>`;}).join('');
-  $('#view').innerHTML=`
+  $('#view').innerHTML=`${seletorGeral()}
   <div class="panel">
     <h2>Esteira conectada · ${wk(w)}</h2>
     <div class="flow">
@@ -1113,6 +1214,7 @@ function render(){
   $('#pgSub').textContent = gestor ? 'Pré-vendas e vendas na mesma esteira.' : `${ESTEIRA_NOME[p.esteira]} · só você vê e edita este plano.`;
   $('#ctxSemana').hidden = ['acessos','clint','como','conta','clientes','todos'].includes(state.tab);
   cur[3]();
+  if(state.tab==='geral') ligarSeletorGeral();
   if(gestor) $('#view').insertAdjacentHTML('afterbegin', avisoLimiteBusca());
   ligarObs($('#view'));
 }
