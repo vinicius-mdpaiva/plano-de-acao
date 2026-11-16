@@ -19,6 +19,7 @@ const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 const brl = v => (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 const fd = d => { if(!d) return '—'; const x=new Date(d+'T12:00:00Z'); return `${DIAS[x.getUTCDay()]} ${d.slice(8,10)}/${d.slice(5,7)}`; };
 const dm = d => `${d.slice(8,10)}/${d.slice(5,7)}`;
+const segundaDe = d => { const x=new Date(d+'T12:00:00Z'), dia=x.getUTCDay(); x.setUTCDate(x.getUTCDate()+(dia===0?-6:1-dia)); return x.toISOString().slice(0,10); };
 const addDias = (iso,n) => { const d=new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
 const segunda = iso => { const g=new Date(iso+'T12:00:00Z').getUTCDay(); return addDias(iso, g===0?-6:1-g); };
 function semanaIso(iso){ const d=new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+3-((d.getUTCDay()+6)%7)); const a=new Date(Date.UTC(d.getUTCFullYear(),0,4)); return 1+Math.round(((d-a)/864e5-3+((a.getUTCDay()+6)%7))/7); }
@@ -287,7 +288,7 @@ function sugestoesDoMes(eu){
   if(!temMensal(eu)) return [];
   const F=FOTOS[eu]; if(!F || !F.congelado || !MES.semanas.includes(state.semana)) return [];
   return F.itens.filter(f=> f.semana<=state.semana && !desfecho(f,eu).fim
-    && !ITENS.some(i=>i.dono===eu && i.semana===state.semana && mesmaConta(i,f)));
+    && !itensDaSemana(eu, state.semana).some(i=>mesmaConta(i,f)));
 }
 
 /* ---------- itens ---------- */
@@ -303,6 +304,9 @@ function extrasDesfecho(pre, minData){
     <div class="extra-desf" data-se="reagendada" hidden>
       <label class="f" for="${pre}-nova">Nova data da reunião<input id="${pre}-nova" type="date" min="${minData}"></label>
       <p class="hint f wide">O no-show fica registrado e a reunião volta para o seu plano na nova data.</p></div>
+    <div class="extra-desf" data-se="rolou" hidden>
+      <label class="f" for="${pre}-rol">Nova data prevista<input id="${pre}-rol" type="date" min="${addDias(minData||ATUAL,7)}"></label>
+      <p class="hint f wide">Não fechou na data prevista: o negócio vai para a semana da nova data, com o status atual.</p></div>
     <div class="extra-desf" data-se="realizada" hidden>
       <label class="f" for="${pre}-dest">Passou para<select id="${pre}-dest"><option value="">Escolha o vendedor…</option>${vend}</select></label></div>`;
 }
@@ -314,6 +318,8 @@ function lerDesfecho(pre, r){
     if(!p.motivo){ toast('Escolha o motivo da perda'); $('#'+pre+'-mot').focus(); return null; } }
   if(r==='reagendada'){ p.novaData=$('#'+pre+'-nova').value;
     if(!p.novaData){ toast('Informe a nova data da reunião'); $('#'+pre+'-nova').focus(); return null; } }
+  if(r==='rolou'){ p.novaData=$('#'+pre+'-rol').value;
+    if(!p.novaData){ toast('Informe a nova data prevista'); $('#'+pre+'-rol').focus(); return null; } }
   if(r==='realizada'){ p.destinoId=Number($('#'+pre+'-dest').value)||null;
     if(!p.destinoId){ toast('Escolha para qual vendedor a reunião foi passada'); $('#'+pre+'-dest').focus(); return null; } }
   return p;
@@ -342,8 +348,22 @@ function duplicados(){
   return pares;
 }
 
+// Itens da semana de uma pessoa: o que está PREVISTO PARA FECHAR na semana (na pré-vendas, a data da reunião),
+// venha do plano de qualquer semana; itens sem previsão contam pela semana do plano. O mesmo negócio aparece uma vez,
+// pelo lançamento mais recente. Na semana atual, entram também os abertos com previsão vencida (para atualizar).
+function itensDaSemana(dono, w, atrasados=true){
+  const fim=addDias(w,6);
+  const L=ITENS.filter(i=>i.dono===dono && (
+    i.origem==='fora' ? i.semana===w :
+    prev(i) ? (prev(i)>=w && prev(i)<=fim) || (atrasados && w===ATUAL && !i.resultado && prev(i)<w) :
+    i.semana===w));
+  return negociosDe(L).map(g=>g.ult).filter(i=>L.includes(i));
+}
+const vencida = i => !i.resultado && prev(i) && prev(i)<state.semana;
+// ações (data da ação) de uma pessoa dentro da semana, de qualquer negócio
+const acoesDaSemana = (dono, w) => ITENS.filter(i=>i.dono===dono && i.quando && i.quando>=w && i.quando<=addDias(w,6));
 function planoTabela(dono, editavel){
-  const itens = ITENS.filter(i=>i.dono===dono && i.semana===state.semana).sort((a,b)=>(a.quando||'9').localeCompare(b.quando||'9'));
+  const itens = itensDaSemana(dono, state.semana).sort((a,b)=>(prev(a)||'9').localeCompare(prev(b)||'9') || (a.quando||'9').localeCompare(b.quando||'9'));
   return tabelaItens(itens, editavel, false, esteiraDe(dono)==='pv');
 }
 function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSemana=false){
@@ -359,7 +379,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
       <td><div class="stack"><b>${esc(i.empresa)}</b>${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${obsChip('i'+i.id, i.observacoes)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
-      <td class="when">${fd(prev(i))}</td>
+      <td class="when">${fd(prev(i))}${vencida(i)?'<span class="pill p-warn">Previsão vencida</span>':''}</td>
       <td><div class="stack">${statusPill(i)}${editavel && i.resultado==='noshow' ? `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Corrigir'}</button></div>` : ''}${editavel && !i.resultado ? (state.excluir===i.id
         ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
         : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}${gestor ? (state.gExcluir===i.id
@@ -376,7 +396,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
         <label class="f wide" for="e-acao-${i.id}">Ação desta semana
           <input id="e-acao-${i.id}" value="${esc(i.acao)}" placeholder="Ex.: reunião com o decisor"></label>
         <label class="f" for="e-quando-${i.id}">Quando
-          <input id="e-quando-${i.id}" type="date" value="${i.quando||''}" min="${s.ini}" max="${s.fim}"></label>
+          <input id="e-quando-${i.id}" type="date" value="${i.quando||''}"></label>
         <label class="f" for="e-prev-${i.id}">${pv?'Data da reunião':'Previsão de fechamento'}
           <input id="e-prev-${i.id}" type="date" value="${i.previsao||''}"></label>
         <label class="f" for="e-temp-${i.id}">Temperatura
@@ -397,7 +417,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
   }).join('');
   const colData = mostrarDono ? 'Reunião / previsão' : soPv ? 'Data da reunião' : 'Previsão de fechamento';
   return `<div class="tbl"><table>
-    <thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>${mostrarDono?'Lead / negócio':soPv?'Lead':'Negócio'}</th><th>Em que pé está</th><th>Ação da semana · quando</th><th>${colData}</th><th>Status</th></tr></thead>
+    <thead><tr>${mostrarDono?'<th>Dono</th>':''}<th>${mostrarDono?'Lead / negócio':soPv?'Lead':'Negócio'}</th><th>Em que pé está</th><th>Próxima ação · quando</th><th>${colData}</th><th>Status</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="${cols}" class="empty">Nenhum compromisso nesta semana ainda.</td></tr>`}</tbody></table></div>`;
 }
 /* ---------- gestor edita qualquer item ---------- */
@@ -436,7 +456,7 @@ function ligarGestor(root){
   }));
   root.querySelectorAll('form[data-gsave]').forEach(f=>{
     const id=Number(f.dataset.gsave), i=ITENS.find(x=>x.id===id), sel=$('#g-res-'+id);
-    const mostra=()=>mostrarExtra(f, sel.value==='reagendada'?'':sel.value);
+    const mostra=()=>mostrarExtra(f, ['reagendada','rolou'].includes(sel.value)?'':sel.value);
     // preenche motivo e vendedor atuais
     if(i.motivo_perda) $('#g-'+id+'-mot').value=i.motivo_perda;
     $('#g-'+id+'-det').value=i.motivo_detalhe||'';
@@ -487,7 +507,7 @@ function ligarTabela(root){
 /* ---------- MEU PLANO ---------- */
 function viewPlano(){
   const eu=me(), pv=esteiraDe(eu)==='pv', s=sem(state.semana);
-  const pend = ITENS.filter(i=>i.dono===eu && i.semana===state.semana && semPasso(i)).length;
+  const pend = itensDaSemana(eu, state.semana).filter(semPasso).length;
   const sug = sugestoesDoMes(eu);
   $('#view').innerHTML = `
   ${sug.length?`<div class="panel">
@@ -513,12 +533,13 @@ function viewPlano(){
       <p class="clint" id="clintInfo">Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.</p>
       <label class="f wide" for="st">Em que pé está
         <input id="st" placeholder="${pv?'Ex.: respondeu o 3º toque, quer entender preço':'Ex.: proposta enviada, aguardando o sócio'}"></label>
-      <label class="f wide" for="ac">Ação desta semana
+      <label class="f wide" for="ac">Próxima ação
         <input id="ac" placeholder="${pv?'Ex.: ligação para agendar com o decisor':'Ex.: reunião de fechamento com o sócio'}"></label>
-      <label class="f" for="qd">Quando
-        <input id="qd" type="date" min="${s.ini}" max="${s.fim}"></label>
-      <label class="f" for="pv">${pv?'Data da reunião':'Previsão de fechamento'}
-        <input id="pv" type="date"></label>
+      <label class="f" for="qd">Quando (qualquer dia)
+        <input id="qd" type="date"></label>
+      <label class="f" for="pv">${pv?'Data da reunião':'Previsão de fechamento *'}
+        <input id="pv" type="date" min="${ATUAL}"></label>
+      <p class="hint f wide" style="grid-column:1/-1">${pv?'A reunião entra na semana da data dela.':'O negócio entra na semana da previsão de fechamento. As ações podem ser em qualquer dia, inclusive em semanas antes do fechamento.'}</p>
       ${obsCampo('obs','',pv?'Ex.: decisor só fala depois das 18h':'Ex.: sócio volta de viagem dia 12, negociar à vista')}
       <div class="actions">
         <button class="btn primary" type="submit">Adicionar ao plano</button>
@@ -536,7 +557,7 @@ function viewPlano(){
     const n=CLINT.porRotulo[$('#emp').value.trim()];
     $('#clintInfo').innerHTML = n ? infoClint(n,pv) : 'Busque pela empresa ou pelo contato. A lista traz todos os negócios do Clint, os seus primeiro. Não achou? Digite o nome mesmo assim.';
     const alvo = n ? {deal_id:n.deal_id, empresa:n.empresa||n.contato_nome} : {deal_id:null, empresa:$('#emp').value};
-    const ja = alvo.empresa && ITENS.find(i=>i.dono===me() && i.semana===state.semana && !i.resultado && mesmoNegocio(i,alvo));
+    const ja = alvo.empresa && itensDaSemana(me(), state.semana).find(i=>!i.resultado && mesmoNegocio(i,alvo));
     if(ja) $('#clintInfo').innerHTML += `<br><span class="aviso-dup"><b>${esc(ja.empresa)} já está no seu plano desta semana${ja.origem==='pv'?' (veio da pré-vendas)':''}.</b> Ao adicionar, completamos esse item em vez de criar outro.</span>`;
     if(n){ if($('#val') && !$('#val').value && n.valor) $('#val').value=n.valor; if(pv && n.data_reuniao && !$('#pv').value) $('#pv').value=n.data_reuniao; }
   });
@@ -548,9 +569,11 @@ function viewPlano(){
     if(!pv && !val){ toast('Informe o valor'); return $('#val').focus(); }
     if(!pr){ toast('Escolha o produto'); return $('#prod').focus(); }
     if(orig==='plano' && (!st||!ac||!qd)) return toast('Preencha em que pé está, a ação e o dia');
+    if(orig==='plano' && !pv && !$('#pv').value){ toast('Informe a previsão de fechamento'); return $('#pv').focus(); }
+    const pvData=$('#pv').value, foraDaSemana = orig==='plano' && pvData && (pvData<state.semana || pvData>addDias(state.semana,6));
     const ok = await salvar('criarItem',{semana:state.semana, empresa:emp, deal_id:n?.deal_id||null, valor:val, temp:$('#temp').value,
       origem:orig, status:st, acao:ac, quando:qd, previsao:$('#pv').value, produto:pr, observacoes:$('#obs').value.trim()},
-      orig==='fora'?`${emp} registrado fora do plano`:`${emp} adicionado ao plano`);
+      orig==='fora'?`${emp} registrado fora do plano`:foraDaSemana?`${emp} adicionado ao plano da ${wk(segundaDe(pvData))} (semana da ${pv?'reunião':'previsão'})`:`${emp} adicionado ao plano`);
     if(ok) state.puxado=null;
   };
   $('#add').addEventListener('submit',e=>{e.preventDefault(); add('plano');});
@@ -569,7 +592,7 @@ function viewPlano(){
 /* ---------- FECHAMENTO ---------- */
 function viewFechamento(){
   const eu=me(), pv=esteiraDe(eu)==='pv', nw=wk(nextWeek(state.semana));
-  const abertos=ITENS.filter(i=>i.dono===eu && i.semana===state.semana && !i.resultado);
+  const abertos=itensDaSemana(eu, state.semana).filter(i=>!i.resultado);
   const vend=TIME.filter(p=>p.esteira==='vd'&&p.ativo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
   const rows=abertos.map(i=>`<tr data-id="${i.id}">
     <td><b>${esc(i.empresa)}</b><span class="tag">${pv?'':brl(i.valor)+' · '}${esc(i.temp)}</span></td>
@@ -592,9 +615,9 @@ function viewFechamento(){
     <tbody>${rows||`<tr><td colspan="3" class="empty">Tudo fechado na ${wk(state.semana)}.</td></tr>`}</tbody></table></div></div>`;
   $('#view').querySelectorAll('tr[data-id] button').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr'), i=ITENS.find(x=>x.id==tr.dataset.id), r=b.dataset.r;
-    if(r==='perdeu' || r==='reagendada'){
+    if(r==='perdeu' || r==='reagendada' || r==='rolou'){
       const ex=$('#view').querySelector(`tr[data-extra="${i.id}"]`); ex.hidden=false; ex.dataset.r=r; mostrarExtra(ex, r);
-      ex.querySelector(r==='perdeu'?'select':'input').focus(); return;
+      ex.querySelector(r==='perdeu'?'select':`[data-se="${r}"] input`).focus(); return;
     }
     const p={id:i.id, resultado:r};
     if(r==='realizada'){
@@ -608,13 +631,13 @@ function viewFechamento(){
   $('#view').querySelectorAll('[data-conf]').forEach(b=>b.addEventListener('click',async()=>{
     const ex=b.closest('tr'), id=Number(b.dataset.conf), i=ITENS.find(x=>x.id===id), r=ex.dataset.r;
     const p=lerDesfecho('f'+id, r); if(!p) return;
-    b.disabled=true; await salvar('fecharItem',{id, ...p}, `${i.empresa}: ${RES[r][0]}`); b.disabled=false;
+    b.disabled=true; await salvar('fecharItem',{id, ...p}, r==='rolou'?`${i.empresa} foi para a ${wk(segundaDe(p.novaData))}`:`${i.empresa}: ${RES[r][0]}`); b.disabled=false;
   }));
 }
 
 /* ---------- números ---------- */
 function calcPessoa(n,w){
-  const S=ITENS.filter(i=>i.semana===w&&i.dono===n), plano=S.filter(i=>i.origem!=='fora');
+  const S=itensDaSemana(n, w, false), plano=S.filter(i=>i.origem!=='fora');
   if(esteiraDe(n)==='pv'){
     const real=S.filter(i=>i.resultado==='realizada'), ns=S.filter(i=>i.resultado==='noshow'||i.resultado==='reagendada').length;
     const filhos=ITENS.filter(x=>x.origem==='pv' && real.some(r=>r.id===x.de));
@@ -661,7 +684,7 @@ function viewMeuDash(){
     <div class="kpi"><span class="k">Previsto na semana</span><span class="v">${brl(c.prevSem)}</span><span class="d">aberto com previsão nesta semana</span></div>`;
   $('#view').innerHTML=`${seletorGeral()}<div class="grid2">
     <div class="panel"><h2>Meus números · ${wk(w)}</h2><div class="kpis">${k}</div></div>
-    <div class="panel"><h2>Minha semana, dia a dia</h2>${agenda(c.S,false)}</div></div>`;
+    <div class="panel"><h2>Minha semana, dia a dia</h2>${agenda(acoesDaSemana(eu,w),false)}</div></div>`;
 }
 // mesmos campos do Meu dash, somando o mês inteiro (cada negócio conta uma vez, como na Visão geral do gestor)
 function viewMeuDashMes(){
@@ -678,7 +701,7 @@ function viewMeuDashMes(){
   $('#view').innerHTML=`${seletorGeral()}<div class="grid2">
     <div class="panel"><h2>Meus números · ${MES.label}</h2><div class="kpis">${k}</div>
       <p class="hint">${pv?'Cada lead conta uma vez no mês, mesmo que tenha sido remarcado.':`Cada negócio conta uma vez no mês, mesmo que tenha rolado de semana. Funil ainda aberto: <b>${brl(m.ativo)}</b> · perdido: ${brl(m.perdido)}.`}</p></div>
-    <div class="panel"><h2>Minha semana, dia a dia</h2>${agenda(sem.S,false)}</div></div>`;
+    <div class="panel"><h2>Minha semana, dia a dia</h2>${agenda(acoesDaSemana(eu,state.semana),false)}</div></div>`;
 }
 
 /* ---------- GESTOR: VISÃO GERAL ---------- */
@@ -1033,7 +1056,7 @@ function viewTime(){
   let itens, semPrev=0;
   if(state.verDia){
     // daily: o que o time planejou fazer no dia (data da ação)
-    itens=ITENS.filter(i=>i.semana===state.semana && daPessoa(i) && (i.quando===state.verDia || (!i.resultado && !i.quando)));
+    itens=ITENS.filter(i=>daPessoa(i) && (i.quando===state.verDia || (i.semana===state.semana && !i.resultado && !i.quando)));
     itens.sort((a,b)=>(a.quando||'9').localeCompare(b.quando||'9') || ordemDono(a.dono)-ordemDono(b.dono));
   } else {
     // semana: o que está PROJETADO PARA FECHAR na semana (previsão de fechamento; na pré-vendas, a data da reunião),
