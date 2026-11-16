@@ -992,14 +992,30 @@ function viewTime(){
   const opsSem=SEMANAS.map(x=>`<option value="${x.id}" ${x.id===state.semana?'selected':''}>${x.label}${x.id===ATUAL?' (atual)':''}</option>`).join('');
   const opsDia=[['','Semana inteira'],...dias.map(d=>[d,fd(d)+(d===HOJE?' (hoje)':'')])].map(([v,l])=>`<option value="${v}" ${v===state.verDia?'selected':''}>${l}</option>`).join('');
   const todos=state.verPessoa==='Todos';
-  let itens=ITENS.filter(i=>i.semana===state.semana && (todos || i.dono===state.verPessoa));
-  if(state.verDia) itens=itens.filter(i=>i.quando===state.verDia || (!i.resultado && !i.quando));
   const ordemDono=n=>TIME.findIndex(p=>p.nome===n);
-  itens.sort((a,b)=>(a.quando||'9').localeCompare(b.quando||'9') || ordemDono(a.dono)-ordemDono(b.dono));
+  const daPessoa=i=>todos || i.dono===state.verPessoa;
+  let itens, semPrev=0;
+  if(state.verDia){
+    // daily: o que o time planejou fazer no dia (data da ação)
+    itens=ITENS.filter(i=>i.semana===state.semana && daPessoa(i) && (i.quando===state.verDia || (!i.resultado && !i.quando)));
+    itens.sort((a,b)=>(a.quando||'9').localeCompare(b.quando||'9') || ordemDono(a.dono)-ordemDono(b.dono));
+  } else {
+    // semana: o que está PROJETADO PARA FECHAR na semana (previsão de fechamento; na pré-vendas, a data da reunião),
+    // venha do plano de qualquer semana. O mesmo negócio aparece uma vez, pelo lançamento mais recente.
+    const ini=state.semana, fim=addDias(ini,6);
+    const naJanela=ITENS.filter(i=>daPessoa(i) && prev(i) && prev(i)>=ini && prev(i)<=fim);
+    const grupos=negociosDe(naJanela).map(g=>g.ult);
+    // itens do plano desta semana ainda sem previsão: aparecem no fim, para ninguém sumir
+    const sem=ITENS.filter(i=>i.semana===ini && daPessoa(i) && !prev(i) && i.origem!=='fora' && !grupos.some(x=>x.dono===i.dono && mesmoNegocio(x,i)));
+    semPrev=sem.length;
+    grupos.sort((a,b)=>prev(a).localeCompare(prev(b)) || ordemDono(a.dono)-ordemDono(b.dono));
+    itens=[...grupos, ...sem.sort((a,b)=>ordemDono(a.dono)-ordemDono(b.dono))];
+  }
   const soPv=!todos && esteiraDe(state.verPessoa)==='pv';
   const modo = todos && state.verDia ? `Daily de ${fd(state.verDia)}: o que o time planejou para o dia.` :
-               todos ? 'O time todo na semana, ordenado por dia.' :
-               state.verDia ? `${esc(state.verPessoa)} em ${fd(state.verDia)}.` : `Semana inteira de ${esc(state.verPessoa)}, dia a dia. Bom para a RTC.`;
+               todos ? 'O que o time tem projetado para fechar na semana (previsão de fechamento; na pré-vendas, data da reunião), ordenado pela data prevista.' :
+               state.verDia ? `${esc(state.verPessoa)} em ${fd(state.verDia)}.` : `O que ${esc(state.verPessoa.split(' ')[0])} tem projetado para fechar na semana, pela data prevista. Bom para a RTC.`;
+  const avisoSemPrev = !state.verDia && semPrev ? ` <b>${semPrev} ${semPrev===1?'item do plano da semana está':'itens do plano da semana estão'} sem previsão de fechamento</b> e ${semPrev===1?'aparece':'aparecem'} no fim da lista.` : '';
   $('#view').innerHTML=`<div class="panel">
     <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(170px,220px))">
       <label class="f" for="verP">Plano de<select id="verP">${ops}</select></label>
@@ -1007,7 +1023,7 @@ function viewTime(){
       <label class="f" for="verD">Dia<select id="verD">${opsDia}</select></label>
       <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button><button class="btn sm" id="semInteira" type="button">Semana inteira</button></div>
     </div>
-    <p class="hint">${modo} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
+    <p class="hint">${modo}${avisoSemPrev} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
     ${tabelaItens(itens,false,todos,soPv,true)}</div>`;
   $('#verP').addEventListener('change',e=>{state.verPessoa=e.target.value; render();});
   $('#verD').addEventListener('change',e=>{state.verDia=e.target.value; render();});
