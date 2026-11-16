@@ -983,6 +983,42 @@ function viewTodos(){
   $('#tQ').addEventListener('input',e=>{ f.q=e.target.value; const pos=e.target.selectionStart; render(); const n=$('#tQ'); n.focus(); n.setSelectionRange(pos,pos); });
   ligarGestor($('#view'));
 }
+// Consolidação do que a tabela de Planos do time está mostrando (muda junto com os filtros)
+function dashTime(itens, porData){
+  const abertos=itens.filter(i=>!i.resultado);
+  if(!itens.length) return '';
+  const V=abertos.filter(i=>esteiraDe(i.dono)!=='pv'), R=abertos.filter(i=>esteiraDe(i.dono)==='pv');
+  const soma=L=>L.reduce((a,i)=>a+(i.valor||0),0);
+  const empresas=new Set(abertos.map(i=>nomeNeg(i.empresa))).size;
+  const total=soma(V), pond=V.reduce((a,i)=>a+(i.valor||0)*(PROB[i.temp]||.6),0);
+  const temps=['Quente','Morno','Frio'].map(t=>({t, L:V.filter(i=>i.temp===t)}));
+  const dataDe=i=>porData==='acao' ? (i.quando||'') : (prev(i)||'');
+  const dias=[...new Set(abertos.map(dataDe))].sort((a,b)=>(a||'9').localeCompare(b||'9'));
+  let acum=0;
+  const linhasDia=dias.map(d=>{ const Ld=V.filter(i=>dataDe(i)===d), Rd=R.filter(i=>dataDe(i)===d); acum+=soma(Ld);
+    return `<tr><td>${d?fd(d):'<span class="tag">sem data</span>'}</td><td class="num">${Ld.length}</td><td class="num">${brl(soma(Ld))}</td><td class="num">${brl(acum)}</td><td class="num">${Rd.length||'—'}</td></tr>`; }).join('');
+  const pessoas=[...new Set(abertos.map(i=>i.dono))];
+  const linhasPessoa=pessoas.length>1 ? pessoas.map(n=>{ const L=abertos.filter(i=>i.dono===n), pv=esteiraDe(n)==='pv';
+    return `<tr><td>${esc(n)}</td><td class="num">${L.length} ${pv?(L.length===1?'reunião':'reuniões'):(L.length===1?'negócio':'negócios')}</td><td class="num">${pv?'—':brl(soma(L))}</td><td class="num">${pv?'—':brl(Math.round(L.reduce((a,i)=>a+(i.valor||0)*(PROB[i.temp]||.6),0)))}</td></tr>`; }).join('') : '';
+  const fechados=itens.length-abertos.length;
+  return `<div class="dash-time">
+    <h2>Consolidado do que está na tela</h2>
+    <p class="hint">Soma só o que a tabela acima está mostrando e em aberto${fechados?` (${fechados} já ${fechados===1?'fechado fica':'fechados ficam'} de fora)`:''}. Muda junto com os filtros.</p>
+    <div class="kpis kpis-4">
+      <div class="kpi"><span class="k">Em aberto</span><span class="v">${V.length}</span><span class="d">${V.length===1?'negócio':'negócios'} de vendas · ${empresas} ${empresas===1?'empresa':'empresas'} no total</span></div>
+      <div class="kpi"><span class="k">Valor total</span><span class="v">${brl(total)}</span><span class="d">ticket médio ${V.length?brl(Math.round(total/V.length)):'—'}</span></div>
+      <div class="kpi"><span class="k">Ponderado pela temperatura</span><span class="v">${brl(Math.round(pond))}</span><span class="d">${total?Math.round(pond/total*100):0}% do total</span></div>
+      <div class="kpi"><span class="k">Reuniões da pré-vendas</span><span class="v">${R.length}</span><span class="d">em aberto na tela</span></div>
+    </div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="tbl"><table><thead><tr><th>Temperatura</th><th class="num">Negócios</th><th class="num">Valor</th><th class="num">% do valor</th></tr></thead><tbody>
+        ${temps.map(({t,L})=>`<tr><td><span class="pill ${t==='Quente'?'p-bad':t==='Morno'?'p-warn':'p-open'}">${t}</span></td><td class="num">${L.length}</td><td class="num">${brl(soma(L))}</td><td class="num">${total?Math.round(soma(L)/total*100):0}%</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="tbl"><table><thead><tr><th>${porData==='acao'?'Dia da ação':'Previsão'}</th><th class="num">Negócios</th><th class="num">Valor no dia</th><th class="num">Acumulado</th><th class="num">Reuniões</th></tr></thead><tbody>${linhasDia}</tbody></table></div>
+    </div>
+    ${linhasPessoa?`<div class="tbl" style="margin-top:14px"><table><thead><tr><th>Pessoa</th><th class="num">Em aberto</th><th class="num">Valor</th><th class="num">Ponderado</th></tr></thead><tbody>${linhasPessoa}</tbody></table></div>`:''}
+  </div>`;
+}
 function viewTime(){
   const dias=diasDaSemana(state.semana);
   if(state.verDia && !dias.includes(state.verDia)) state.verDia='';
@@ -1025,7 +1061,8 @@ function viewTime(){
       <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button><button class="btn sm" id="semInteira" type="button">Semana inteira</button></div>
     </div>
     <p class="hint">${modo}${avisoSemPrev} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
-    ${tabelaItens(itens,false,todos,soPv,true)}</div>`;
+    ${tabelaItens(itens,false,todos,soPv,true)}
+    ${dashTime(itens, state.verDia?'acao':'previsao')}</div>`;
   $('#verP').addEventListener('change',e=>{state.verPessoa=e.target.value; render();});
   $('#verD').addEventListener('change',e=>{state.verDia=e.target.value; render();});
   $('#verS').addEventListener('change',e=>{state.semana=e.target.value; state.verDia=''; montarMes(); render();});
