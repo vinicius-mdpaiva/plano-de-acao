@@ -989,7 +989,8 @@ function viewTime(){
   const nomes=membros().map(p=>p.nome);
   if(state.verPessoa!=='Todos' && !nomes.includes(state.verPessoa)) state.verPessoa='Todos';
   const ops=['Todos',...nomes].map(n=>`<option ${n===state.verPessoa?'selected':''}>${esc(n)}</option>`).join('');
-  const opsDia=[['','Todos os dias'],...dias.map(d=>[d,fd(d)+(d===HOJE?' (hoje)':'')])].map(([v,l])=>`<option value="${v}" ${v===state.verDia?'selected':''}>${l}</option>`).join('');
+  const opsSem=SEMANAS.map(x=>`<option value="${x.id}" ${x.id===state.semana?'selected':''}>${x.label}${x.id===ATUAL?' (atual)':''}</option>`).join('');
+  const opsDia=[['','Semana inteira'],...dias.map(d=>[d,fd(d)+(d===HOJE?' (hoje)':'')])].map(([v,l])=>`<option value="${v}" ${v===state.verDia?'selected':''}>${l}</option>`).join('');
   const todos=state.verPessoa==='Todos';
   let itens=ITENS.filter(i=>i.semana===state.semana && (todos || i.dono===state.verPessoa));
   if(state.verDia) itens=itens.filter(i=>i.quando===state.verDia || (!i.resultado && !i.quando));
@@ -998,17 +999,20 @@ function viewTime(){
   const soPv=!todos && esteiraDe(state.verPessoa)==='pv';
   const modo = todos && state.verDia ? `Daily de ${fd(state.verDia)}: o que o time planejou para o dia.` :
                todos ? 'O time todo na semana, ordenado por dia.' :
-               state.verDia ? `${esc(state.verPessoa)} em ${fd(state.verDia)}.` : `Plano completo de ${esc(state.verPessoa)}, bom para a RTC.`;
+               state.verDia ? `${esc(state.verPessoa)} em ${fd(state.verDia)}.` : `Semana inteira de ${esc(state.verPessoa)}, dia a dia. Bom para a RTC.`;
   $('#view').innerHTML=`<div class="panel">
     <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(170px,220px))">
       <label class="f" for="verP">Plano de<select id="verP">${ops}</select></label>
+      <label class="f" for="verS">Semana<select id="verS">${opsSem}</select></label>
       <label class="f" for="verD">Dia<select id="verD">${opsDia}</select></label>
-      <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button></div>
+      <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button><button class="btn sm" id="semInteira" type="button">Semana inteira</button></div>
     </div>
     <p class="hint">${modo} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
     ${tabelaItens(itens,false,todos,soPv,true)}</div>`;
   $('#verP').addEventListener('change',e=>{state.verPessoa=e.target.value; render();});
   $('#verD').addEventListener('change',e=>{state.verDia=e.target.value; render();});
+  $('#verS').addEventListener('change',e=>{state.semana=e.target.value; state.verDia=''; montarMes(); render();});
+  $('#semInteira').addEventListener('click',()=>{state.verDia=''; render();});
   $('#hoje').addEventListener('click',()=>{state.verPessoa='Todos'; state.semana=ATUAL; state.verDia=HOJE; montarMes(); render();});
   ligarGestor($('#view'));
 }
