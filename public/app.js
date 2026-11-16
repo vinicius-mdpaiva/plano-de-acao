@@ -1004,17 +1004,18 @@ function viewTime(){
     // venha do plano de qualquer semana. O mesmo negócio aparece uma vez, pelo lançamento mais recente.
     const ini=state.semana, fim=addDias(ini,6);
     const naJanela=ITENS.filter(i=>daPessoa(i) && prev(i) && prev(i)>=ini && prev(i)<=fim);
-    const grupos=negociosDe(naJanela).map(g=>g.ult);
+    // só o que ainda está aberto no pipe: ganho, perdido e os demais desfechos saem desta visualização
+    const grupos=negociosDe(naJanela).map(g=>g.ult).filter(i=>!i.resultado);
     // itens do plano desta semana ainda sem previsão: aparecem no fim, para ninguém sumir
-    const sem=ITENS.filter(i=>i.semana===ini && daPessoa(i) && !prev(i) && i.origem!=='fora' && !grupos.some(x=>x.dono===i.dono && mesmoNegocio(x,i)));
+    const sem=ITENS.filter(i=>i.semana===ini && daPessoa(i) && !prev(i) && !i.resultado && i.origem!=='fora' && !grupos.some(x=>x.dono===i.dono && mesmoNegocio(x,i)));
     semPrev=sem.length;
     grupos.sort((a,b)=>prev(a).localeCompare(prev(b)) || ordemDono(a.dono)-ordemDono(b.dono));
     itens=[...grupos, ...sem.sort((a,b)=>ordemDono(a.dono)-ordemDono(b.dono))];
   }
   const soPv=!todos && esteiraDe(state.verPessoa)==='pv';
   const modo = todos && state.verDia ? `Daily de ${fd(state.verDia)}: o que o time planejou para o dia.` :
-               todos ? 'O que o time tem projetado para fechar na semana (previsão de fechamento; na pré-vendas, data da reunião), ordenado pela data prevista.' :
-               state.verDia ? `${esc(state.verPessoa)} em ${fd(state.verDia)}.` : `O que ${esc(state.verPessoa.split(' ')[0])} tem projetado para fechar na semana, pela data prevista. Bom para a RTC.`;
+               todos ? 'O que ainda está aberto no pipe com previsão de fechamento na semana (na pré-vendas, reuniões com data na semana), ordenado pela data prevista. Ganhos, perdidos e reuniões já fechadas não aparecem aqui.' :
+               state.verDia ? `${esc(state.verPessoa)} em ${fd(state.verDia)}.` : `O que ${esc(state.verPessoa.split(' ')[0])} ainda tem aberto para fechar na semana, pela data prevista. Ganhos e perdidos não aparecem aqui. Bom para a RTC.`;
   const avisoSemPrev = !state.verDia && semPrev ? ` <b>${semPrev} ${semPrev===1?'item do plano da semana está':'itens do plano da semana estão'} sem previsão de fechamento</b> e ${semPrev===1?'aparece':'aparecem'} no fim da lista.` : '';
   $('#view').innerHTML=`<div class="panel">
     <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(170px,220px))">
