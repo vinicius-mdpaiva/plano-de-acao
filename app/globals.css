@@ -218,6 +218,6 @@ textarea{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface)
 .zap{border-color:#25D366}
 .zap-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .zap textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5;min-height:320px}
-.dash-time{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.dash-time{margin-top:28px}
 .dash-time h2{margin:0 0 4px}
 .kpis-4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}

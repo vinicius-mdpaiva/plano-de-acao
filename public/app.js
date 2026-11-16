@@ -1001,7 +1001,7 @@ function dashTime(itens, porData){
   const linhasPessoa=pessoas.length>1 ? pessoas.map(n=>{ const L=abertos.filter(i=>i.dono===n), pv=esteiraDe(n)==='pv';
     return `<tr><td>${esc(n)}</td><td class="num">${L.length} ${pv?(L.length===1?'reunião':'reuniões'):(L.length===1?'negócio':'negócios')}</td><td class="num">${pv?'—':brl(soma(L))}</td><td class="num">${pv?'—':brl(Math.round(L.reduce((a,i)=>a+(i.valor||0)*(PROB[i.temp]||.6),0)))}</td></tr>`; }).join('') : '';
   const fechados=itens.length-abertos.length;
-  return `<div class="dash-time">
+  return `<div class="panel dash-time">
     <h2>Consolidado do que está na tela</h2>
     <p class="hint">Soma só o que a tabela acima está mostrando e em aberto${fechados?` (${fechados} já ${fechados===1?'fechado fica':'fechados ficam'} de fora)`:''}. Muda junto com os filtros.</p>
     <div class="kpis kpis-4">
@@ -1061,8 +1061,8 @@ function viewTime(){
       <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button><button class="btn sm" id="semInteira" type="button">Semana inteira</button></div>
     </div>
     <p class="hint">${modo}${avisoSemPrev} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
-    ${tabelaItens(itens,false,todos,soPv,true)}
-    ${dashTime(itens, state.verDia?'acao':'previsao')}</div>`;
+    ${tabelaItens(itens,false,todos,soPv,true)}</div>
+    ${dashTime(itens, state.verDia?'acao':'previsao')}`;
   $('#verP').addEventListener('change',e=>{state.verPessoa=e.target.value; render();});
   $('#verD').addEventListener('change',e=>{state.verDia=e.target.value; render();});
   $('#verS').addEventListener('change',e=>{state.semana=e.target.value; state.verDia=''; montarMes(); render();});
