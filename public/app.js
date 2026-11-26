@@ -332,6 +332,24 @@ function origemPill(i){
   return '<span class="pill p-vd">Plano</span>';
 }
 const semPasso = i => !i.resultado && (!i.acao || !i.quando);
+// Pendências de um item aberto: data vencida (previsão/reunião ou ação) ou sem próximo passo definido
+function pendencias(i){
+  if(i.resultado || i.origem==='fora') return [];
+  const L=[], pv=esteiraDe(i.dono)==='pv';
+  if(prev(i) && prev(i)<HOJE) L.push(pv?`Reunião de ${dm(prev(i))} sem desfecho`:`Previsão vencida (${dm(prev(i))})`);
+  if(!i.acao) L.push('Sem ação definida');
+  if(!i.quando) L.push('Sem dia da ação');
+  else if(i.quando<HOJE) L.push(`Ação vencida (${dm(i.quando)})`);
+  return L;
+}
+// Negócios abertos de uma pessoa com pendência (cada negócio uma vez, pelo lançamento mais recente)
+function pendentesDe(dono){
+  return negociosDe(ITENS.filter(i=>i.dono===dono && i.origem!=='fora')).map(g=>g.ult)
+    .filter(i=>pendencias(i).length).sort((a,b)=>(prev(a)||i9).localeCompare(prev(b)||i9));
+}
+const i9='9999';
+// semana em que o item aparece no Meu plano (previsão vencida aparece na semana atual)
+const semanaDoItem = i => prev(i) ? (prev(i)<ATUAL ? ATUAL : segundaDe(prev(i))) : i.semana;
 // mesmo negócio: mesmo deal do Clint ou mesmo nome de empresa (igual ao servidor)
 const nomeNeg = t => semAcento(String(t||'').trim());
 const mesmoNegocio = (a,b) => (a.deal_id && b.deal_id && a.deal_id===b.deal_id) || nomeNeg(a.empresa)===nomeNeg(b.empresa);
@@ -371,15 +389,18 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
   const rows = itens.map(i=>{
     const pv = esteiraDe(i.dono)==='pv';
     const semDiaPill = '<span class="pill p-warn">Sem dia definido</span>';
+    const acaoVencida = !i.resultado && i.quando && i.quando<HOJE;
+    const quandoTag = i.quando ? (acaoVencida?`<span class="pill p-bad">Ação vencida · ${fd(i.quando)}</span>`:`<span class="tag">${fd(i.quando)}</span>`) : semDiaPill;
     const passo = i.resultado ? (i.acao?`<span>${esc(i.acao)}</span><span class="tag">${fd(i.quando)}</span>`:'<span class="tag">—</span>') :
-      !i.acao ? `<div class="stack"><span class="pill p-warn">Sem ação definida</span>${i.quando?'':semDiaPill}</div>` :
-      `<div class="stack"><span>${esc(i.acao)}</span>${i.quando?`<span class="tag">${fd(i.quando)}</span>`:semDiaPill}</div>`;
-    const main = `<tr class="${!i.resultado&&!i.quando?'nodate':''}">
+      !i.acao ? `<div class="stack"><span class="pill p-bad">Sem ação definida</span>${i.quando?quandoTag:semDiaPill}</div>` :
+      `<div class="stack"><span>${esc(i.acao)}</span>${quandoTag}</div>`;
+    const pendente = pendencias(i).length>0;
+    const main = `<tr class="${[!i.resultado&&!i.quando?'nodate':'', pendente?'pendente':''].join(' ').trim()}">
       ${mostrarDono?`<td><div class="stack"><span class="pill ${pv?'p-pv':'p-vd'}">${esc(i.dono)}</span>${mostrarSemana?`<span class="tag">${sem(i.semana).label}</span>`:''}</div></td>`:''}
       <td><div class="stack"><b>${esc(i.empresa)}</b>${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${obsChip('i'+i.id, i.observacoes)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
-      <td class="when">${fd(prev(i))}${vencida(i)?'<span class="pill p-warn">Previsão vencida</span>':''}</td>
+      <td class="when">${fd(prev(i))}${!i.resultado && prev(i) && prev(i)<HOJE?`<span class="pill p-bad">${pv?'Sem desfecho':'Previsão vencida'}</span>`:''}</td>
       <td><div class="stack">${statusPill(i)}${editavel && i.resultado==='noshow' ? `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Corrigir'}</button></div>` : ''}${editavel && !i.resultado ? (state.excluir===i.id
         ? `<div class="acoes-linha"><span class="tag">Excluir este item?</span><button class="btn sm danger" data-delok="${i.id}">Sim, excluir</button><button class="btn sm ghost" data-delno>Cancelar</button></div>`
         : `<div class="acoes-linha"><button class="btn sm" data-edit="${i.id}">${state.editing===i.id?'Fechar':'Editar'}</button><button class="btn sm ghost danger" data-del="${i.id}" aria-label="Excluir ${esc(i.empresa)}" title="Excluir">Excluir</button></div>`):''}${gestor ? (state.gExcluir===i.id
@@ -509,7 +530,15 @@ function viewPlano(){
   const eu=me(), pv=esteiraDe(eu)==='pv', s=sem(state.semana);
   const pend = itensDaSemana(eu, state.semana).filter(semPasso).length;
   const sug = sugestoesDoMes(eu);
+  const pends = pendentesDe(eu);
   $('#view').innerHTML = `
+  ${pends.length?`<div class="panel pend-panel">
+    <h2>Para atualizar · ${pends.length} ${pends.length===1?'negócio':'negócios'}</h2>
+    <p class="hint">${pv?'Reuniões':'Negócios'} em aberto com data vencida ou sem próximo passo. Atualize a próxima ação, o dia e ${pv?'o desfecho da reunião':'a previsão de fechamento'} (ou dê o desfecho) para o pipe ficar certo.</p>
+    <div class="tbl"><table><thead><tr><th>Empresa</th><th>O que falta</th><th>${pv?'Reunião':'Previsão'}</th><th></th></tr></thead><tbody>
+    ${pends.map(i=>`<tr class="pendente"><td><b>${esc(i.empresa)}</b></td><td><div class="stack">${pendencias(i).map(t=>`<span class="pill p-bad">${esc(t)}</span>`).join('')}</div></td>
+      <td class="when">${fd(prev(i))}</td><td><button class="btn sm primary" data-irpend="${i.id}">Atualizar</button></td></tr>`).join('')}
+    </tbody></table></div></div>`:''}
   ${sug.length?`<div class="panel">
     <h2>Do seu plano mensal para a ${wk(state.semana)}</h2>
     <p class="hint">Negócios do plano mensal de ${MES.label} previstos para esta semana ou atrasados. Puxe para o plano e complete o status, a ação e o dia. Errou a temperatura, o valor ou a semana? Clique em Editar.</p>
@@ -587,6 +616,11 @@ function viewPlano(){
     $('#st').focus(); toast(`${f.empresa} no formulário: complete status, ação e dia`);
   }));
   ligarTabela($('#view'));
+  $('#view').querySelectorAll('[data-irpend]').forEach(b=>b.addEventListener('click',()=>{
+    const i=ITENS.find(x=>x.id===Number(b.dataset.irpend)); if(!i) return;
+    state.semana=semanaDoItem(i); state.editing=i.id; montarMes(); render();
+    setTimeout(()=>{ const f=document.querySelector(`form[data-save="${i.id}"]`); f?.scrollIntoView({behavior:'smooth',block:'center'}); f?.querySelector('input,select')?.focus(); },60);
+  }));
 }
 
 /* ---------- FECHAMENTO ---------- */
@@ -762,6 +796,28 @@ function calcMes(n){
 const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 /* ---------- resumo diário para o WhatsApp (só gestor, na Visão geral) ---------- */
 // *negrito* e _itálico_ no formato do WhatsApp
+// MTD do Painel Comercial (meta, esperado até hoje, realizado e diferença), para o resumo da diretoria
+const brlSinal = v => (v>0?'+':v<0?'−':'')+brl(Math.abs(v||0));
+function blocoMTD(){
+  const m=state.mtd;
+  if(!m) return ['_MTD: buscando no Painel Comercial…_'];
+  if(m.erro) return [`_MTD indisponível agora (${m.erro}). Tente de novo em instantes._`];
+  const t=m.mtd, L=[];
+  L.push(`*MTD · ${MESES[Number(m.mes.slice(5,7))-1]}* (dia útil ${m.dias_passados} de ${m.dias_uteis})`);
+  L.push(`Meta do mês: ${brl(t.meta)}`);
+  L.push(`Esperado até hoje: ${brl(t.esperado)}`);
+  L.push(`Realizado: ${brl(t.realizado)} (${t.meta?Math.round(t.realizado/t.meta*100):0}% da meta)`);
+  L.push(`*Diferença: ${brlSinal(t.diferenca)}* ${t.diferenca>=0?'acima':'abaixo'} do esperado`);
+  if(t.falta>0 && t.por_dia) L.push(`Para bater a meta: ${brl(t.falta)}, ${brl(t.por_dia)} por dia útil`);
+  (m.pessoas||[]).forEach(p=>L.push(`• ${p.pessoa}: ${brl(p.realizado)} de ${brl(p.meta)} · esperado ${brl(p.esperado)} · ${brlSinal(p.diferenca)}`));
+  return L;
+}
+async function carregarMTD(){
+  state.mtd=null;
+  try{ const r=await fetch('/api/painel',{cache:'no-store'}); const j=await r.json(); state.mtd = j.ok ? j : {erro:j.erro||'falha'}; }
+  catch{ state.mtd={erro:'sem conexão com o painel'}; }
+  if(state.zap && state.tab==='geral') render();
+}
 function resumoWhatsApp(){ return state.geralModo==='mes' ? resumoWhatsAppMes() : resumoWhatsAppSemana(); }
 const horaAgora = () => new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'});
 // SEMANA: só o que ainda está para fechar na semana (previsão de fechamento entre segunda e domingo)
@@ -769,6 +825,7 @@ function resumoWhatsAppSemana(){
   const w=state.semana, fimSem=addDias(w,6), L=[];
   L.push(`*Plano de ação · ${wk(w)} (${dm(w)} a ${dm(addDias(w,4))})*`);
   L.push(`_Posição de ${fd(HOJE)}, ${horaAgora()}_`);
+  L.push('', ...blocoMTD());
   const vds=TIME.filter(p=>p.esteira==='vd'&&p.ativo);
   let total=0, qtd=0, ganhoTot=0;
   const blocos=vds.map(p=>{
@@ -803,6 +860,7 @@ function resumoWhatsAppMes(){
   const L=[], fimMes=fimDoMes();
   L.push(`*Plano de ação · ${MES.label}*`);
   L.push(`_Posição de ${fd(HOJE)}, ${horaAgora()}_`);
+  L.push('', ...blocoMTD());
   const V=TIME.filter(p=>p.esteira==='vd'&&p.ativo).map(p=>({p,c:calcMes(p.nome)}));
   const sv=k=>V.reduce((a,x)=>a+(x.c[k]||0),0);
   L.push('', '*VENDAS*', '');
@@ -840,7 +898,7 @@ function painelWhatsApp(){
       <a class="btn" id="zapAbrir" href="#" target="_blank" rel="noopener">Abrir no WhatsApp</a></div></div>`;
 }
 function ligarWhatsApp(){
-  $('#zapBtn')?.addEventListener('click',()=>{ state.zap=!state.zap; render(); if(state.zap) $('#zapTxt')?.scrollIntoView({behavior:'smooth',block:'center'}); });
+  $('#zapBtn')?.addEventListener('click',()=>{ state.zap=!state.zap; if(state.zap) carregarMTD(); render(); if(state.zap) $('#zapTxt')?.scrollIntoView({behavior:'smooth',block:'center'}); });
   $('#zapFechar')?.addEventListener('click',()=>{ state.zap=false; render(); });
   $('#zapCopiar')?.addEventListener('click',async()=>{
     const t=$('#zapTxt').value;
@@ -1042,6 +1100,16 @@ function dashTime(itens, porData){
     ${linhasPessoa?`<div class="tbl" style="margin-top:14px"><table><thead><tr><th>Pessoa</th><th class="num">Em aberto</th><th class="num">Valor</th><th class="num">Ponderado</th></tr></thead><tbody>${linhasPessoa}</tbody></table></div>`:''}
   </div>`;
 }
+function textoPendencias(nomes){
+  const blocos=nomes.map(n=>{
+    const L=pendentesDe(n); if(!L.length) return null;
+    return [`*${n}* · ${L.length} ${L.length===1?'negócio precisa':'negócios precisam'} de atualização`,
+      ...L.map(i=>`• ${i.empresa} — ${pendencias(i).join('; ')}`)].join('\n');
+  }).filter(Boolean);
+  if(!blocos.length) return `*Plano de ação · pendências*\n_Posição de ${fd(HOJE)}_\n\nNenhuma pendência: tudo com próximo passo e datas em dia. 👏`;
+  return [`*Plano de ação · pendências*`, `_Posição de ${fd(HOJE)}_`, '', blocos.join('\n\n'), '',
+    'Por favor, atualize hoje no plano: próxima ação com dia e a previsão de fechamento (ou o desfecho, se já ganhou ou perdeu).'].join('\n');
+}
 function viewTime(){
   const dias=diasDaSemana(state.semana);
   if(state.verDia && !dias.includes(state.verDia)) state.verDia='';
@@ -1081,11 +1149,22 @@ function viewTime(){
       <label class="f" for="verP">Plano de<select id="verP">${ops}</select></label>
       <label class="f" for="verS">Semana<select id="verS">${opsSem}</select></label>
       <label class="f" for="verD">Dia<select id="verD">${opsDia}</select></label>
-      <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button><button class="btn sm" id="semInteira" type="button">Semana inteira</button></div>
+      <div class="actions" style="grid-column:auto"><button class="btn sm" id="hoje" type="button">Daily de hoje</button><button class="btn sm" id="semInteira" type="button">Semana inteira</button><button class="btn sm" id="pendBtn" type="button">${state.pendRel?'Fechar pendências':'Relatório de pendências'}</button></div>
     </div>
     <p class="hint">${modo}${avisoSemPrev} Você pode editar ou excluir qualquer item: a alteração aparece no plano da pessoa.</p>
     ${tabelaItens(itens,false,todos,soPv,true)}</div>
     ${dashTime(itens, state.verDia?'acao':'previsao')}`;
+  if(state.pendRel){
+    const nomes = todos ? TIME.filter(p=>p.ativo && (p.esteira==='vd'||p.esteira==='pv')).map(p=>p.nome) : [state.verPessoa];
+    $('#view').insertAdjacentHTML('afterbegin', `<div class="panel zap"><div class="zap-h"><h2>Pendências · ${todos?'time todo':esc(state.verPessoa)}</h2><button class="btn sm ghost" id="pendFechar" type="button">Fechar</button></div>
+      <p class="hint">Negócios abertos com data vencida (previsão, reunião ou ação) ou sem próximo passo. Escolha a pessoa no filtro "Plano de" para mandar só o dela.</p>
+      <textarea id="zapTxt" rows="14" spellcheck="false">${esc(textoPendencias(nomes))}</textarea>
+      <div class="actions" style="margin-top:12px"><button class="btn primary" id="zapCopiar" type="button">Copiar texto</button>
+        <a class="btn" id="zapAbrir" href="#" target="_blank" rel="noopener">Abrir no WhatsApp</a></div></div>`);
+    $('#pendFechar').addEventListener('click',()=>{ state.pendRel=false; render(); });
+    ligarWhatsApp();
+  }
+  $('#pendBtn').addEventListener('click',()=>{ state.pendRel=!state.pendRel; render(); });
   $('#verP').addEventListener('change',e=>{state.verPessoa=e.target.value; render();});
   $('#verD').addEventListener('change',e=>{state.verDia=e.target.value; render();});
   $('#verS').addEventListener('change',e=>{state.semana=e.target.value; state.verDia=''; montarMes(); render();});
@@ -1348,10 +1427,10 @@ const NAV_GESTOR=()=>[['Acompanhamento',[['time','Planos do time','users',viewTi
   ['Ajuda e conta',[['como','Como funciona','help',viewComo],['conta','Minha senha','user',()=>viewConta(false)]]]];
 function badge(id){
   const eu=me(), w=state.semana;
-  if(id==='plano'){ const n=ITENS.filter(i=>i.dono===eu&&i.semana===w&&semPasso(i)).length; return n?`<span class="badge red">${n}</span>`:''; }
+  if(id==='plano'){ const n=pendentesDe(eu).length; return n?`<span class="badge red" title="Para atualizar">${n}</span>`:''; }
   if(id==='fechamento'){ const n=ITENS.filter(i=>i.dono===eu&&i.semana===w&&!i.resultado).length; return n?`<span class="badge">${n}</span>`:''; }
   if(id==='mes'){ return !FOTOS[eu]?.congelado?'<span class="badge">!</span>':''; }
-  if(id==='time'){ const n=ITENS.filter(i=>i.semana===w&&semPasso(i)).length; return n?`<span class="badge red">${n}</span>`:''; }
+  if(id==='time'){ const n=TIME.filter(p=>p.ativo).reduce((a,p)=>a+pendentesDe(p.nome).length,0); return n?`<span class="badge red" title="Negócios com pendência no time">${n}</span>`:''; }
   if(id==='todos'){ const n=duplicados().length; return n?`<span class="badge red" title="Negócios duplicados">${n}</span>`:''; }
   if(id==='mesgs'){ const n=vendedores().filter(p=>!FOTOS[p.nome]?.congelado).length; return n?`<span class="badge">${n}</span>`:''; }
   if(id==='acessos'){ const n=(D.acessos||[]).filter(a=>a.ativo&&!a.tem_senha).length; return n?`<span class="badge">${n}</span>`:''; }

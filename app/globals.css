@@ -221,3 +221,6 @@ textarea{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface)
 .dash-time{margin-top:28px}
 .dash-time h2{margin:0 0 4px}
 .kpis-4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+tr.pendente > td:first-child{box-shadow:inset 3px 0 0 #E5675C}
+tr.pendente > td{background:color-mix(in srgb, #E5675C 6%, transparent)}
+.pend-panel{border-color:#E5675C}

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { sql, bancoConfigurado } from '../../../../lib/db.js';
 import { normalizar, gravarNegocios } from '../../../../lib/clint.js';
 import { garantirEsquema } from '../../../../lib/migrar.js';
+import { aplicarPerdidosDoClint } from '../../../../lib/painel.js';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -46,6 +47,8 @@ async function tratar(req, payload) {
       return Response.json({ ok: true, aviso: 'evento guardado, mas sem ID do negócio' });
     }
     await gravarNegocios(sql, [dados]);
+    // perdido no Clint: fecha na hora o item aberto no plano
+    if (dados.status === 'LOST' || /^perdid/i.test(dados.etapa ?? '')) await aplicarPerdidosDoClint(sql, []).catch(() => null);
     await sql`update clint_eventos set deal_id = ${dados.deal_id} where id = ${ev.id}`;
     return Response.json({ ok: true, dealId: dados.deal_id });
   } catch (e) {
