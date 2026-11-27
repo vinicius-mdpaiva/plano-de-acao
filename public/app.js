@@ -16,6 +16,9 @@ const state = {semana:null, tab:null, editing:null, verPessoa:'Todos', verDia:''
 /* ---------- utilidades ---------- */
 const $ = s => document.querySelector(s);
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// card do negócio no Clint (abre em outra aba); só quando o item está ligado a um negócio do Clint
+const URL_CLINT = id => 'https://app.useclint.com/deal/'+encodeURIComponent(id);
+const botaoClint = id => /^[0-9a-f-]{36}$/i.test(String(id||'')) ? `<a class="btn sm ghost btn-clint" href="${URL_CLINT(id)}" target="_blank" rel="noopener" title="Abrir o card do cliente no Clint" onclick="event.stopPropagation()">Abrir no Clint ↗</a>` : '';
 const brl = v => (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 const fd = d => { if(!d) return '—'; const x=new Date(d+'T12:00:00Z'); return `${DIAS[x.getUTCDay()]} ${d.slice(8,10)}/${d.slice(5,7)}`; };
 const dm = d => `${d.slice(8,10)}/${d.slice(5,7)}`;
@@ -397,7 +400,7 @@ function tabelaItens(itens, editavel, mostrarDono, soPv, gestor=false, mostrarSe
     const pendente = pendencias(i).length>0;
     const main = `<tr class="${[!i.resultado&&!i.quando?'nodate':'', pendente?'pendente':''].join(' ').trim()}">
       ${mostrarDono?`<td><div class="stack"><span class="pill ${pv?'p-pv':'p-vd'}">${esc(i.dono)}</span>${mostrarSemana?`<span class="tag">${sem(i.semana).label}</span>`:''}</div></td>`:''}
-      <td><div class="stack"><b>${esc(i.empresa)}</b>${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${obsChip('i'+i.id, i.observacoes)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
+      <td><div class="stack"><b>${esc(i.empresa)}</b>${botaoClint(i.deal_id)}${i.produto?`<span class="pill p-prod">${esc(i.produto)}</span>`:'<span class="tag">Sem produto</span>'}${origemPill(i)}${obsChip('i'+i.id, i.observacoes)}${pv?`<span class="tag">${esc(i.temp)}</span>`:`<span class="tag">${brl(i.valor)} · ${esc(i.temp)}</span>`}${pv&&i.destino?`<span class="tag">Passou para ${esc(i.destino)}</span>`:''}</div></td>
       <td class="txt">${i.status?esc(i.status):'<span class="tag">Sem status</span>'}<span class="tag">Clint: ${esc(etapa(i))}</span></td>
       <td class="txt">${passo}</td>
       <td class="when">${fd(prev(i))}${!i.resultado && prev(i) && prev(i)<HOJE?`<span class="pill p-bad">${pv?'Sem desfecho':'Previsão vencida'}</span>`:''}</td>
@@ -536,7 +539,7 @@ function viewPlano(){
     <h2>Para atualizar · ${pends.length} ${pends.length===1?'negócio':'negócios'}</h2>
     <p class="hint">${pv?'Reuniões':'Negócios'} em aberto com data vencida ou sem próximo passo. Atualize a próxima ação, o dia e ${pv?'o desfecho da reunião':'a previsão de fechamento'} (ou dê o desfecho) para o pipe ficar certo.</p>
     <div class="tbl"><table><thead><tr><th>Empresa</th><th>O que falta</th><th>${pv?'Reunião':'Previsão'}</th><th></th></tr></thead><tbody>
-    ${pends.map(i=>`<tr class="pendente"><td><b>${esc(i.empresa)}</b></td><td><div class="stack">${pendencias(i).map(t=>`<span class="pill p-bad">${esc(t)}</span>`).join('')}</div></td>
+    ${pends.map(i=>`<tr class="pendente"><td><div class="stack"><b>${esc(i.empresa)}</b>${botaoClint(i.deal_id)}</div></td><td><div class="stack">${pendencias(i).map(t=>`<span class="pill p-bad">${esc(t)}</span>`).join('')}</div></td>
       <td class="when">${fd(prev(i))}</td><td><button class="btn sm primary" data-irpend="${i.id}">Atualizar</button></td></tr>`).join('')}
     </tbody></table></div></div>`:''}
   ${sug.length?`<div class="panel">
@@ -629,7 +632,7 @@ function viewFechamento(){
   const abertos=itensDaSemana(eu, state.semana).filter(i=>!i.resultado);
   const vend=TIME.filter(p=>p.esteira==='vd'&&p.ativo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
   const rows=abertos.map(i=>`<tr data-id="${i.id}">
-    <td><b>${esc(i.empresa)}</b><span class="tag">${pv?'':brl(i.valor)+' · '}${esc(i.temp)}</span></td>
+    <td><b>${esc(i.empresa)}</b><span class="tag">${pv?'':brl(i.valor)+' · '}${esc(i.temp)}</span>${botaoClint(i.deal_id)}</td>
     <td class="txt">${i.acao?esc(i.acao)+`<span class="tag">${fd(i.quando)}</span>`:'<span class="tag">Sem ação definida</span>'}</td>
     <td><div class="result">${pv?`
       <select aria-label="Vendedor de destino" class="dest" style="width:auto"><option value="">Passar para…</option>${vend}</select>
@@ -1295,7 +1298,7 @@ function linhasClientes(){
   $('#cliTotal').textContent=`${L.length.toLocaleString('pt-BR')} de ${(cli.lista||[]).length.toLocaleString('pt-BR')} negócios`;
   $('#cliLista').innerHTML = vis.length ? `<div class="tbl"><table><thead><tr><th>Empresa</th><th>Contato</th><th>Etapa</th><th>Dono no Clint</th><th class="num">Valor</th><th>Atualizado</th></tr></thead><tbody>
     ${vis.map(n=>`<tr class="clicavel ${cli.sel===n.deal_id?'sel':''}" data-cli="${esc(n.deal_id)}" tabindex="0">
-      <td><div class="stack"><b>${n.empresa?esc(n.empresa):'<span class="tag">Sem empresa</span>'}</b><span class="pill ${n.funil==='fitfeed'?'p-pv':'p-vd'}">${esc((n.funil||'?').toUpperCase())}</span></div></td>
+      <td><div class="stack"><b>${n.empresa?esc(n.empresa):'<span class="tag">Sem empresa</span>'}</b><span class="pill ${n.funil==='fitfeed'?'p-pv':'p-vd'}">${esc((n.funil||'?').toUpperCase())}</span>${botaoClint(n.deal_id)}</div></td>
       <td class="txt">${esc(n.contato_nome||'—')}<span class="tag">${esc(n.contato_email||'')}</span><span class="tag">${esc(n.contato_telefone||'')}</span></td>
       <td>${esc(n.etapa||'—')}<span class="tag">${INATIVAS.includes(chaveTxt(n.etapa))?'encerrado ou parado':'ativo'}</span></td>
       <td class="txt">${esc(n.dono||'—')}<span class="tag">${esc(n.dono_email||'')}</span></td>
@@ -1322,7 +1325,7 @@ function detalheCliente(){
   const n=d.negocio, ve=quemVe(n), rot=(n.empresa||n.contato_nome||'Sem nome').trim();
   const campo=(k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v||'<span class="tag">vazio</span>'}</span></div>`;
   box.innerHTML=`
-    <div class="det-head"><div><h2>${esc(rot)}</h2><p class="hint">ID no Clint: <code>${esc(n.deal_id)}</code></p></div><button class="btn sm ghost" id="cliFechar" type="button">Fechar</button></div>
+    <div class="det-head"><div><h2>${esc(rot)}</h2><p class="hint">ID no Clint: <code>${esc(n.deal_id)}</code></p></div><div class="acoes-linha">${botaoClint(n.deal_id).replace('btn sm ghost','btn sm primary')}<button class="btn sm ghost" id="cliFechar" type="button">Fechar</button></div></div>
     <div class="kvs">
       ${campo('Empresa',esc(n.empresa))}${campo('Contato',esc(n.contato_nome))}${campo('E-mail do contato',esc(n.contato_email))}${campo('Telefone',esc(n.contato_telefone))}
       ${campo('Funil',esc((n.funil||'').toUpperCase()))}${campo('Origem',esc(n.origem))}${campo('Etapa',esc(n.etapa))}${campo('Status',esc(n.status))}
